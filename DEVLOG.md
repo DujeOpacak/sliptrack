@@ -35,7 +35,21 @@ UserDevice dodan za spremanje Expo push tokena po uređaju
 PaymentSlipAudit dodan za praćenje povijesti promjena statusa uplatnice (korisnički uvid, ne administratorski)
 Timestamp polja (createdAt/updatedAt) postavljaju se automatski putem Hibernate @CreationTimestamp/@UpdateTimestamp
 Ažuriran CLAUDE.md — package name backenda ostaje com.sliptrack.sliptrackbackend
+Kreiran UserRepository (Spring Data JPA)
+Implementirana JWT autentifikacija i Spring Security konfiguracija: JwtService, CustomUserDetailsService, JwtAuthenticationFilter, SecurityConfig
+Kreiran AuthController s endpointima POST /api/auth/register i /login
+Dodana podrška za access + refresh token: RefreshToken entitet i RefreshTokenRepository, RefreshTokenService (generira, hashira SHA-256, validira i rotira refresh token), endpointi POST /api/auth/refresh i /logout
+Access token traje 15 min, refresh token 30 dana; refresh token se čuva u bazi kao hash, ne plaintext, i rotira se pri svakom korištenju
+Sve ručno testirano kroz Postman: register, login, kriva lozinka, duplikat emaila, zaštićena ruta bez/s tokena, refresh, logout, ponovna upotreba revociranog refresh tokena
+Provjera baze putem IntelliJ Database alata (Ultimate) uz DBeaver/pgAdmin kao alternativu
+
+Problemi i rješenja
+
+Kod grešaka u kontroleru (409/401) servlet kontejner interno preusmjerava na /error rutu, koja je prolazila kroz Security filter i vraćala generički 403 umjesto stvarnog statusa — riješeno dodavanjem /error u permitAll
+DaoAuthenticationProvider u ovoj verziji Spring Securityja nema no-arg konstruktor ni setUserDetailsService — riješeno korištenjem konstruktora s UserDetailsService argumentom
+LazyInitializationException pri pristupu RefreshToken.getUser() nakon zatvaranja Hibernate sesije — riješeno dodavanjem @Transactional na AuthService.refresh()
 
 Sutra
 
-Kreiranje Repository sučelja (Spring Data JPA) za sve entitete
+Dogovoriti i implementirati promjene u auth/token flowu (najavljeno, detalji još nisu definirani)
+REST endpointi za domenske entitete (PaymentSlip, Category, Property, Dashboard)

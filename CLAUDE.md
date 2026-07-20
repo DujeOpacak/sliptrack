@@ -28,7 +28,7 @@ sliptrack/
 
 ## Tech stack
 
-- **Backend**: Spring Boot 4.1.0, Java 21, Maven, Hibernate ORM (Spring Data JPA), Spring Security, JWT (još nije implementiran), Lombok
+- **Backend**: Spring Boot 4.1.0, Java 21, Maven, Hibernate ORM (Spring Data JPA), Spring Security, JWT (access + refresh token, jjwt 0.12.6), Lombok
 - **Baza**: PostgreSQL 18 (Docker), db `sliptrack`, user/pass `sliptrack` / `sliptrack123`, port 5432
 - **Object storage**: MinIO (slike uplatnica), konzola na http://localhost:9001, user/pass `sliptrack` / `sliptrack123`, API port 9000
 - **Mobilna app**: React Native + Expo, PDF417 barkod skeniranje (HUB-3 standard) kao primarna metoda, Google ML Kit OCR kao rezerva
@@ -43,8 +43,10 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
 - ✅ `spring.jpa.hibernate.ddl-auto=update` — Hibernate sam kreira tablice, nema ručnih migracija (Flyway/Liquibase se ne koristi)
 - ✅ Paketna struktura backenda kreirana (`controller`, `service`, `repository`, `model`, `dto`, `security`, `config`)
-- ✅ JPA entiteti kreirani: `User`, `Category`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
-- ❌ Nema još repozitorija, servisa, kontrolera ni sigurnosne konfiguracije
+- ✅ JPA entiteti kreirani: `User`, `Category`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit`, `RefreshToken` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
+- ✅ JWT autentifikacija i Spring Security konfiguracija gotovi i testirani (Postman): `POST /api/auth/register`, `/login`, `/refresh`, `/logout`
+- ✅ Access token (15 min) + refresh token (30 dana, hashiran u bazi, rotira se pri svakom refreshu)
+- ❌ Nema još REST endpointa za domenske entitete (PaymentSlip, Category, Property...)
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -92,6 +94,9 @@ Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva
 **PaymentSlipAudit** — povijest promjena statusa uplatnice (korisnički uvid u zadnju promjenu vlastite uplatnice)
 - id, paymentSlip, changedBy, oldStatus, newStatus, changedAt
 
+**RefreshToken** — infrastrukturni entitet za JWT refresh flow (nije dio domenskog modela iz projektnog obrasca)
+- id, user, tokenHash (SHA-256 hash, ne plaintext), expiresAt, revoked, createdAt
+
 Enumi (`Role`, `PaymentStatus`, `DevicePlatform`) su u zasebnom paketu `com.sliptrack.sliptrackbackend.enums`, entiteti u `model`.
 
 ### Podaci koji se izvlače skeniranjem uplatnice
@@ -114,7 +119,10 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 
 ## Sigurnost
 
-- JWT autentifikacija (još nije implementirana)
+- JWT autentifikacija implementirana: access token (15 min, `jwt.access-token-expiration-ms`) + refresh token (30 dana, `jwt.refresh-token-expiration-ms`, hashiran SHA-256 u tablici `refresh_tokens`, rotira se pri svakom refreshu)
+- `jwt.secret` trenutno hardkodiran u `application.properties` (commita se u git) — prihvatljivo za sada, razmotriti premještanje u `application-local.properties` (već u `.gitignore`) prije javnog objavljivanja repozitorija
+- Endpointi: `POST /api/auth/register`, `/login`, `/refresh`, `/logout` — javno dostupni (`permitAll`), sve ostalo zahtijeva autentikaciju
+- Napomena: `/error` mora biti u `permitAll` listi — servlet kontejner interno preusmjerava neuhvaćene HTTP greške (npr. `ResponseStatusException`) na `/error`, koji inače prolazi kroz Security filter i vraća pogrešan `403` umjesto stvarnog statusa
 - Dvije uloge: USER, ADMIN
 - Svaki korisnik vidi samo svoje uplatnice
 - Admin nema pristup tuđim financijskim podacima
@@ -123,9 +131,9 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 
 1. ✅ Kreirati paketnu strukturu backenda
 2. ✅ Kreirati JPA entitete i enume
-3. Kreirati Repository sučelja (Spring Data JPA)
-4. JWT autentifikacija + Spring Security konfiguracija
-5. REST endpointi (controller + service sloj)
+3. ✅ Kreirati Repository sučelja (Spring Data JPA) — zasad `UserRepository`, `RefreshTokenRepository`
+4. ✅ JWT autentifikacija + Spring Security konfiguracija (access + refresh token)
+5. REST endpointi za domenske entitete (controller + service sloj: PaymentSlip, Category, Property, Dashboard...)
 6. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
 7. React admin sučelje
 8. Testiranje
