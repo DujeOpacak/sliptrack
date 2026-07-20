@@ -1,0 +1,29 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: sliptrack-postgres
+    environment:
+      POSTGRES_DB: sliptrack
+      POSTGRES_USER: sliptrack
+      POSTGRES_PASSWORD: sliptrack123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+  minio:
+    image: minio/minio
+    container_name: sliptrack-minio
+    environment:
+      MINIO_ROOT_USER: sliptrack
+      MINIO_ROOT_PASSWORD: sliptrack123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+
+volumes:
+  postgres_data:
+  minio_data:
