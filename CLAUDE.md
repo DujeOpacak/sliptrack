@@ -45,12 +45,12 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ❌ Nema još paketne strukture, entiteta, repozitorija, servisa, kontrolera ni sigurnosne konfiguracije — samo prazan `SliptrackBackendApplication.java`
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
-Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr — planirana struktura ispod koristi `com.sliptrack.backend`, treba odlučiti/ujednačiti pri kreiranju paketa).
+Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
 
 ### Planirana paketna struktura backenda (sljedeći korak)
 
 ```
-com.sliptrack.backend/
+com.sliptrack.sliptrackbackend/
   ├── controller/
   ├── service/
   ├── repository/
