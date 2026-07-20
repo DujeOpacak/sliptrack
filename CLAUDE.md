@@ -37,12 +37,14 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-17)
+## Trenutno stanje (2026-07-20)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
 - ✅ `spring.jpa.hibernate.ddl-auto=update` — Hibernate sam kreira tablice, nema ručnih migracija (Flyway/Liquibase se ne koristi)
-- ❌ Nema još paketne strukture, entiteta, repozitorija, servisa, kontrolera ni sigurnosne konfiguracije — samo prazan `SliptrackBackendApplication.java`
+- ✅ Paketna struktura backenda kreirana (`controller`, `service`, `repository`, `model`, `dto`, `security`, `config`)
+- ✅ JPA entiteti kreirani: `User`, `Category`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
+- ❌ Nema još repozitorija, servisa, kontrolera ni sigurnosne konfiguracije
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -78,6 +80,20 @@ com.sliptrack.sliptrackbackend/
 
 Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva samo `imageUrl`.
 
+**RecurringPattern** — analiza obrasca plaćanja po davatelju, podloga za automatske podsjetnike
+- id, user, payerName, averageDayOfMonth, averageAmount, lastPaymentDate, nextPredictedDate, updatedAt
+
+**UserDevice** — Expo push token po uređaju korisnika
+- id, user, deviceToken, platform (ANDROID / IOS), createdAt, updatedAt
+
+**Notification** — zapis poslane push notifikacije (in-app inbox)
+- id, user, paymentSlip (nullable), message, read, sentAt
+
+**PaymentSlipAudit** — povijest promjena statusa uplatnice (korisnički uvid u zadnju promjenu vlastite uplatnice)
+- id, paymentSlip, changedBy, oldStatus, newStatus, changedAt
+
+Enumi (`Role`, `PaymentStatus`, `DevicePlatform`) su u zasebnom paketu `com.sliptrack.sliptrackbackend.enums`, entiteti u `model`.
+
 ### Podaci koji se izvlače skeniranjem uplatnice
 
 IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...), naziv davatelja usluge, opis plaćanja, datum dospijeća.
@@ -105,8 +121,8 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 
 ## Sljedeći koraci (redoslijed)
 
-1. Kreirati paketnu strukturu backenda
-2. Kreirati JPA entitete: User, Role, Category, Property, PaymentSlip
+1. ✅ Kreirati paketnu strukturu backenda
+2. ✅ Kreirati JPA entitete i enume
 3. Kreirati Repository sučelja (Spring Data JPA)
 4. JWT autentifikacija + Spring Security konfiguracija
 5. REST endpointi (controller + service sloj)

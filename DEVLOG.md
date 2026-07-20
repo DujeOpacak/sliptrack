@@ -23,3 +23,19 @@ Sutra
 Kreiranje strukture paketa u Spring Bootu
 Kreiranje Java entiteta (User, Category, Property, PaymentSlip)
 Kreiranje Repository sučelja
+
+20.07.2026. — Dan 2
+Što je napravljeno
+
+Kreirana paketna struktura backenda: controller, service, repository, model, dto, security, config
+Kreirani JPA entiteti: User, Category, Property, PaymentSlip, RecurringPattern, UserDevice, Notification, PaymentSlipAudit
+Kreirani enumi: Role (USER/ADMIN), PaymentStatus (PAID/UNPAID), DevicePlatform (ANDROID/IOS)
+RecurringPattern dodan za podršku automatskim podsjetnicima (analiza obrazaca plaćanja)
+UserDevice dodan za spremanje Expo push tokena po uređaju
+PaymentSlipAudit dodan za praćenje povijesti promjena statusa uplatnice (korisnički uvid, ne administratorski)
+Timestamp polja (createdAt/updatedAt) postavljaju se automatski putem Hibernate @CreationTimestamp/@UpdateTimestamp
+Ažuriran CLAUDE.md — package name backenda ostaje com.sliptrack.sliptrackbackend
+
+Sutra
+
+Kreiranje Repository sučelja (Spring Data JPA) za sve entitete
