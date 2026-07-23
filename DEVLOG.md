@@ -53,3 +53,23 @@ Sutra
 
 Dogovoriti i implementirati promjene u auth/token flowu (najavljeno, detalji još nisu definirani)
 REST endpointi za domenske entitete (PaymentSlip, Category, Property, Dashboard)
+
+23.07.2026. — Dan 3
+Što je napravljeno
+
+Analiza cjelokupnog auth/JWT sloja implementiranog do sada: UserRepository, RefreshTokenRepository, AuthService (register, login, refresh, logout, toAuthResponse), AuthController, JwtService (generiranje i validacija access tokena), JwtAuthenticationFilter, SecurityConfig, CustomUserDetailsService, te svi DTO-ovi (RegisterRequest, LoginRequest, RefreshRequest, AuthResponse, TokenResponse)
+Razjašnjena rotacija refresh tokena: pri svakom /refresh pozivu stari token se označava kao revoked (ne briše se iz baze) čime se čuva audit trag i omogućuje buduća detekcija ponovne upotrebe ukradenog tokena (reuse detection)
+Izrađen grubi plan REST ruta za sve domenske entitete (Category, Property, PaymentSlip, Dashboard, UserDevice, Notification, Admin) — zapisan u CLAUDE.md, regulirat će se po potrebi tijekom implementacije
+Implementiran kompletan CRUD za Category: CategoryRepository, CategoryRequest/CategoryResponse DTO-ovi, CategoryService, CategoryController
+GET rute dostupne svim autenticiranim korisnicima, POST/PUT/DELETE ograničeni na ADMIN ulogu putem @PreAuthorize("hasRole('ADMIN')")
+Dodan @EnableMethodSecurity u SecurityConfig kako bi @PreAuthorize anotacije uopće imale efekt
+Sve Category rute ručno testirane kroz Postman i rade ispravno (uključujući provjeru da USER dobiva 403 na admin-only rute)
+
+Problemi i rješenja
+
+Bez @EnableMethodSecurity na SecurityConfig, @PreAuthorize anotacije na CategoryControlleru se tiho ignoriraju — riješeno dodavanjem anotacije
+
+Sutra
+
+Implementirati Property CRUD (vlasništvo vezano uz User, veza samo uz kategoriju "komunalije")
+Krenuti na PaymentSlip (najsloženiji entitet — Category, Property, User, MinIO upload slike, PaymentSlipAudit pri promjeni statusa)

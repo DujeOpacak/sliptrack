@@ -37,7 +37,7 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-20)
+## Trenutno stanje (2026-07-23)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
@@ -46,7 +46,9 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ JPA entiteti kreirani: `User`, `Category`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit`, `RefreshToken` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
 - ✅ JWT autentifikacija i Spring Security konfiguracija gotovi i testirani (Postman): `POST /api/auth/register`, `/login`, `/refresh`, `/logout`
 - ✅ Access token (15 min) + refresh token (30 dana, hashiran u bazi, rotira se pri svakom refreshu)
-- ❌ Nema još REST endpointa za domenske entitete (PaymentSlip, Category, Property...)
+- ✅ Grubi plan REST ruta za sve domenske entitete definiran (vidi "Plan REST ruta" niže)
+- ✅ Category CRUD implementiran i testiran (Postman): `GET/POST/PUT/DELETE /api/categories` — GET javan svim autenticiranim korisnicima, POST/PUT/DELETE ograničeni na ADMIN (`@PreAuthorize`, `@EnableMethodSecurity` dodan u `SecurityConfig`)
+- ❌ Property, PaymentSlip, Dashboard i ostali REST endpointi još nisu implementirani
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -127,6 +129,72 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 - Svaki korisnik vidi samo svoje uplatnice
 - Admin nema pristup tuđim financijskim podacima
 
+## Plan REST ruta (domenski entiteti)
+
+Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje" znači da se filtriranje po `user` radi u service sloju (iz `SecurityContext`), ne kroz `SecurityConfig`.
+
+### Category `/api/categories`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/categories` | Lista svih kategorija | svi autenticirani |
+| GET | `/api/categories/{id}` | Detalji kategorije | svi autenticirani |
+| POST | `/api/categories` | Nova kategorija | ADMIN |
+| PUT | `/api/categories/{id}` | Izmjena kategorije | ADMIN |
+| DELETE | `/api/categories/{id}` | Brisanje kategorije | ADMIN |
+
+### Property `/api/properties`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/properties` | Lista nekretnina prijavljenog korisnika | USER (samo svoje) |
+| GET | `/api/properties/{id}` | Detalji nekretnine | USER (vlasnik) |
+| POST | `/api/properties` | Nova nekretnina | USER |
+| PUT | `/api/properties/{id}` | Izmjena nekretnine | USER (vlasnik) |
+| DELETE | `/api/properties/{id}` | Brisanje nekretnine | USER (vlasnik) |
+
+### PaymentSlip `/api/payment-slips`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `payerName`, `dueDateFrom/To` | USER (samo svoje) |
+| GET | `/api/payment-slips/{id}` | Detalji uplatnice | USER (vlasnik) |
+| POST | `/api/payment-slips` | Nova uplatnica (ručni unos ili nakon skeniranja) | USER |
+| POST | `/api/payment-slips/{id}/image` | Upload slike u MinIO, upiše `imageUrl` | USER (vlasnik) |
+| PUT | `/api/payment-slips/{id}` | Izmjena podataka uplatnice | USER (vlasnik) |
+| PATCH | `/api/payment-slips/{id}/status` | Promjena statusa PAID/UNPAID → upisuje `PaymentSlipAudit` | USER (vlasnik) |
+| DELETE | `/api/payment-slips/{id}` | Brisanje uplatnice | USER (vlasnik) |
+| GET | `/api/payment-slips/{id}/audit` | Povijest promjena statusa te uplatnice | USER (vlasnik) |
+
+### Dashboard `/api/dashboard`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/dashboard/summary` | Ukupno plaćeno/neplaćeno (filtrirano po kategoriji/davatelju) | USER |
+| GET | `/api/dashboard/by-category` | Iznosi grupirani po kategoriji | USER |
+| GET | `/api/dashboard/by-payer` | Iznosi grupirani po davatelju | USER |
+| GET | `/api/dashboard/timeline` | Troškovi kroz vrijeme (za graf) | USER |
+
+### UserDevice `/api/devices` (push notifikacije)
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| POST | `/api/devices` | Registracija/update Expo push tokena za uređaj | USER |
+| DELETE | `/api/devices/{id}` | Uklanjanje uređaja (npr. logout) | USER (vlasnik) |
+
+### Notification `/api/notifications`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/notifications` | In-app inbox obavijesti | USER (samo svoje) |
+| PATCH | `/api/notifications/{id}/read` | Označi kao pročitano | USER (vlasnik) |
+
+### Admin `/api/admin`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/admin/users` | Popis korisnika | ADMIN |
+| PATCH | `/api/admin/users/{id}/deactivate` | Deaktivacija korisnika | ADMIN |
+| PATCH | `/api/admin/users/{id}/activate` | Reaktivacija korisnika | ADMIN |
+| GET | `/api/admin/stats` | Statistike sustava (broj korisnika, broj skeniranih uplatnica, top kategorije) | ADMIN |
+
+Napomene:
+- `RecurringPattern` nema vlastiti REST endpoint — puni ga interni `@Scheduled` job, nije nešto što klijent CRUD-a direktno.
+- `PaymentSlipAudit` nema create endpoint — upisuje se automatski unutar `PATCH /payment-slips/{id}/status`.
+
 ## Sljedeći koraci (redoslijed)
 
 1. ✅ Kreirati paketnu strukturu backenda
@@ -134,6 +202,8 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 3. ✅ Kreirati Repository sučelja (Spring Data JPA) — zasad `UserRepository`, `RefreshTokenRepository`
 4. ✅ JWT autentifikacija + Spring Security konfiguracija (access + refresh token)
 5. REST endpointi za domenske entitete (controller + service sloj: PaymentSlip, Category, Property, Dashboard...)
+   - ✅ Category (gotovo i testirano)
+   - ❌ Property, PaymentSlip, Dashboard, UserDevice, Notification, Admin
 6. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
 7. React admin sučelje
 8. Testiranje
