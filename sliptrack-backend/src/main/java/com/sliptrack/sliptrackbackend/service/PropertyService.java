@@ -4,6 +4,7 @@ import com.sliptrack.sliptrackbackend.dto.PropertyRequest;
 import com.sliptrack.sliptrackbackend.dto.PropertyResponse;
 import com.sliptrack.sliptrackbackend.model.Property;
 import com.sliptrack.sliptrackbackend.model.User;
+import com.sliptrack.sliptrackbackend.repository.PaymentSlipRepository;
 import com.sliptrack.sliptrackbackend.repository.PropertyRepository;
 import com.sliptrack.sliptrackbackend.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,7 @@ import java.util.List;
 public class PropertyService {
 
     private final PropertyRepository propertyRepository;
+    private final PaymentSlipRepository paymentSlipRepository;
     private final CurrentUserService currentUserService;
 
     public List<PropertyResponse> getAll() {
@@ -55,6 +57,12 @@ public class PropertyService {
 
     public void delete(Long id) {
         Property property = findOwnedOrThrow(id);
+
+        if (paymentSlipRepository.existsByPropertyId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Nekretnina se koristi na postojećim uplatnicama — ne može se obrisati");
+        }
+
         propertyRepository.delete(property);
     }
 

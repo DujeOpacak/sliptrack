@@ -5,6 +5,7 @@ import com.sliptrack.sliptrackbackend.dto.SubCategoryResponse;
 import com.sliptrack.sliptrackbackend.model.Category;
 import com.sliptrack.sliptrackbackend.model.SubCategory;
 import com.sliptrack.sliptrackbackend.repository.CategoryRepository;
+import com.sliptrack.sliptrackbackend.repository.PaymentSlipRepository;
 import com.sliptrack.sliptrackbackend.repository.SubCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ public class SubCategoryService {
 
     private final SubCategoryRepository subCategoryRepository;
     private final CategoryRepository categoryRepository;
+    private final PaymentSlipRepository paymentSlipRepository;
 
     public List<SubCategoryResponse> getAll(Long categoryId) {
         List<SubCategory> subCategories = categoryId != null
@@ -72,6 +74,12 @@ public class SubCategoryService {
 
     public void delete(Long id) {
         SubCategory subCategory = findByIdOrThrow(id);
+
+        if (paymentSlipRepository.existsBySubCategoryId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Potkategorija se koristi na postojećim uplatnicama — ne može se obrisati");
+        }
+
         subCategoryRepository.delete(subCategory);
     }
 

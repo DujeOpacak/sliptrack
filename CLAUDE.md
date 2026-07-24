@@ -37,7 +37,7 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-24)
+## Trenutno stanje (2026-07-25)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
@@ -52,7 +52,9 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ Property CRUD implementiran i testiran (Postman): `GET/POST/PUT/DELETE /api/properties` — bez `@PreAuthorize`, vlasništvo se štiti isključivo u service sloju preko `CurrentUserService` (novi helper u `security` paketu, resolvao trenutnog korisnika iz `SecurityContext` po emailu); pristup tuđoj nekretnini vraća `404`, ne `403` (ne otkriva postojanje tuđih resursa)
 - ✅ Globalno rukovanje greškama: `GlobalExceptionHandler` (`@RestControllerAdvice`, paket `exception`) hvata `MethodArgumentNotValidException` (400, `polje → poruka` mapa), `ResponseStatusException` (status iz iznimke + `message`), `AuthorizationDeniedException` (403, zamjena za staru `AccessDeniedException` u Spring Security 6.3+), i catch-all `Exception` (500, generička poruka klijentu + pun stack trace u server log preko `@Slf4j`) — svi odgovori u dosljednom `{"message": "..."}` formatu, bez curenja internih detalja
 - ✅ `SecurityConfig` dobio eksplicitni `AuthenticationEntryPoint` bean — neautenticirani zahtjevi sad vraćaju `401` (piše JSON direktno u response, ne ide kroz `/error`), umjesto defaultnog Spring Security `403` (`Http403ForbiddenEntryPoint`) koji se koristi kad nema konfiguriranog `httpBasic()`/`formLogin()`
-- ❌ PaymentSlip, Dashboard i ostali REST endpointi još nisu implementirani
+- ✅ PaymentSlip core CRUD implementiran i testiran (Postman): `GET/POST/PUT/PATCH/DELETE /api/payment-slips` + `GET /{id}/audit` — dinamičko filtriranje preko `JpaSpecificationExecutor` (`status`, `categoryId`, `subCategoryId`, `providerName`, `dueDateFrom/To`), validacija subCategory/property pravila u service sloju, `PATCH /status` upisuje `PaymentSlipAudit` samo kad se status stvarno promijeni; MinIO image upload (`POST /{id}/image`) namjerno odgođen kao zaseban korak
+- ✅ Dashboard implementiran i testiran (Postman): `GET /api/dashboard/summary` (filtriran po `categoryId`/`providerName`), `/by-category`, `/by-provider`, `/timeline` (grupirano po mjesecu `dueDate`-a, native SQL `TO_CHAR`) — sve scoped na trenutnog korisnika
+- ❌ MinIO image upload, UserDevice, Notification, Admin endpointi još nisu implementirani
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -88,12 +90,12 @@ com.sliptrack.sliptrackbackend/
 - id, name, address, user (vlasnik)
 
 **PaymentSlip** — uplatnica
-- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), payerName (naziv davatelja), description, dueDate, status (PAID / UNPAID), imageUrl, category, subCategory (nullable — obavezan ako Category ima definirane SubCategory zapise, inače ostaje null), property (nullable, samo ako subCategory.allowsProperty), user, createdAt, scannedAt
+- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), providerName (naziv davatelja usluge — primatelja uplate, ne osobe koja plaća; nazvano `providerName` a ne `payerName` da se ne miješa s korisnikom koji plaća), description, dueDate, status (PAID / UNPAID), imageUrl, category, subCategory (nullable — obavezan ako Category ima definirane SubCategory zapise, inače ostaje null), property (nullable, samo ako subCategory.allowsProperty), user, createdAt, scannedAt
 
 Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva samo `imageUrl`.
 
 **RecurringPattern** — analiza obrasca plaćanja po davatelju, podloga za automatske podsjetnike
-- id, user, payerName, averageDayOfMonth, averageAmount, lastPaymentDate, nextPredictedDate, updatedAt
+- id, user, providerName, averageDayOfMonth, averageAmount, lastPaymentDate, nextPredictedDate, updatedAt
 
 **UserDevice** — Expo push token po uređaju korisnika
 - id, user, deviceToken, platform (ANDROID / IOS), createdAt, updatedAt
@@ -163,7 +165,9 @@ Napomena o `application.properties`: nema `server.error.*` konfiguracije — `sp
 
 ### FK constraint prije brisanja
 
-Kad entitet ima djecu preko `@ManyToOne` (npr. `Category` ← `SubCategory`), `delete()` u service sloju mora provjeriti `existsByParentId()` prije brisanja i vratiti `409 Conflict` s jasnom porukom — ne pustiti da DB FK constraint padne i završi kao neuhvaćeni `500` (`DataIntegrityViolationException`). Cascade-delete je namjerno izbjegnut (npr. brisanje Category ne smije tiho obrisati SubCategory i posljedično PaymentSlip zapise — financijski podaci se ne smiju tiho gubiti). Isti obrazac primijeniti na `SubCategory` kad `PaymentSlip` počne referencirati na nju.
+Kad entitet ima djecu preko `@ManyToOne` (npr. `Category` ← `SubCategory`), `delete()` u service sloju mora provjeriti `existsByParentId()` prije brisanja i vratiti `409 Conflict` s jasnom porukom — ne pustiti da DB FK constraint padne i završi kao neuhvaćeni `500` (`DataIntegrityViolationException`). Cascade-delete je namjerno izbjegnut (npr. brisanje Category ne smije tiho obrisati SubCategory i posljedično PaymentSlip zapise — financijski podaci se ne smiju tiho gubiti). Isti obrazac primijenjen na `SubCategory` i `Property` kad `PaymentSlip` počne referencirati na njih (`PaymentSlipRepository.existsByCategoryId/existsBySubCategoryId/existsByPropertyId`).
+
+**Iznimka od pravila — `PaymentSlip` ↔ `PaymentSlipAudit`**: obrnut slučaj. `PaymentSlipAudit` je podređeni zapis koji ima smisla samo dok postoji `PaymentSlip` na koji se odnosi (povijest promjena statusa te konkretne uplatnice) — blokirati brisanje uplatnice zbog postojeće audit povijesti bi bilo pogrešno. Ovdje `PaymentSlipService.delete()` (`@Transactional`) prvo eksplicitno briše sve `PaymentSlipAudit` zapise (`paymentSlipAuditRepository.deleteByPaymentSlipId(id)`), pa tek onda `PaymentSlip` — cascade delete na razini servisa, ne blokada.
 
 ## Plan REST ruta (domenski entiteti)
 
@@ -199,7 +203,7 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 ### PaymentSlip `/api/payment-slips`
 | Metoda | Ruta | Opis | Autorizacija |
 |---|---|---|---|
-| GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `subCategoryId`, `payerName`, `dueDateFrom/To` | USER (samo svoje) |
+| GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `subCategoryId`, `providerName`, `dueDateFrom/To` | USER (samo svoje) |
 | GET | `/api/payment-slips/{id}` | Detalji uplatnice | USER (vlasnik) |
 | POST | `/api/payment-slips` | Nova uplatnica (ručni unos ili nakon skeniranja) | USER |
 | POST | `/api/payment-slips/{id}/image` | Upload slike u MinIO, upiše `imageUrl` | USER (vlasnik) |
@@ -213,7 +217,7 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 |---|---|---|---|
 | GET | `/api/dashboard/summary` | Ukupno plaćeno/neplaćeno (filtrirano po kategoriji/davatelju) | USER |
 | GET | `/api/dashboard/by-category` | Iznosi grupirani po kategoriji | USER |
-| GET | `/api/dashboard/by-payer` | Iznosi grupirani po davatelju | USER |
+| GET | `/api/dashboard/by-provider` | Iznosi grupirani po davatelju | USER |
 | GET | `/api/dashboard/timeline` | Troškovi kroz vrijeme (za graf) | USER |
 
 ### UserDevice `/api/devices` (push notifikacije)
@@ -250,7 +254,9 @@ Napomene:
    - ✅ Category (gotovo i testirano)
    - ✅ SubCategory (gotovo i testirano)
    - ✅ Property (gotovo i testirano)
-   - ❌ PaymentSlip, Dashboard, UserDevice, Notification, Admin
+   - ✅ PaymentSlip core CRUD (gotovo i testirano) — MinIO image upload odgođen kao zaseban korak
+   - ✅ Dashboard (gotovo i testirano)
+   - ❌ MinIO image upload, UserDevice, Notification, Admin
 6. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
 7. React admin sučelje
 8. Testiranje

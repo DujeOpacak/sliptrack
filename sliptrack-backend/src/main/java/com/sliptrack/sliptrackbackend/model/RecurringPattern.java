@@ -26,7 +26,7 @@ public class RecurringPattern {
     private User user;
 
     @Column(nullable = false)
-    private String payerName;
+    private String providerName;
 
     private Integer averageDayOfMonth;
 

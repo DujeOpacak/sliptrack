@@ -32,7 +32,7 @@ public class PaymentSlip {
 
     private String paymentModel;
 
-    private String payerName;
+    private String providerName;
 
     private String description;
 
@@ -52,6 +52,10 @@ public class PaymentSlip {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "category_id", nullable = false)
     private Category category;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sub_category_id")
+    private SubCategory subCategory;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "property_id")

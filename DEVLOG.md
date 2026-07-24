@@ -110,3 +110,34 @@ Sutra
 
 Krenuti na PaymentSlip (najsloženiji entitet — Category, SubCategory, Property, User, MinIO upload slike, PaymentSlipAudit pri promjeni statusa; uključuje validaciju subCategory/property pravila i primjenu @EntityGraph obrasca od početka)
 Primijeniti isti FK-provjeri-prije-brisanja obrazac na SubCategory kad PaymentSlip počne referencirati na nju
+
+Nastavak Dana 4 — PaymentSlip core CRUD, Dashboard, preimenovanje payerName → providerName
+Što je napravljeno
+
+Dogovoreno da se MinIO image upload odgodi kao zaseban korak nakon core PaymentSlip CRUD-a — smanjuje rizik da se dvije nove stvari (validacijska logika + nova MinIO infrastruktura) miješaju u istom koraku
+Dodano PaymentSlip.subCategory polje na entitet (nedostajalo je unatoč ranijem dogovoru iz prošlog nastavka Dana 4)
+Odabran Specification pristup (JpaSpecificationExecutor) za dinamičko filtriranje liste uplatnica umjesto ručnog pisanja @Query metode za svaku kombinaciju filtera (status, categoryId, subCategoryId, payerName/providerName, dueDateFrom/To)
+Implementiran PaymentSlipRepository (Specification + @EntityGraph na category/subCategory/property, existsByCategoryId/existsBySubCategoryId/existsByPropertyId za FK guardove), PaymentSlipAuditRepository
+Implementirani DTO-ovi: PaymentSlipRequest, PaymentSlipResponse (uključuje categoryName/subCategoryName/propertyName), PaymentSlipStatusUpdateRequest, PaymentSlipAuditResponse
+Implementiran PaymentSlipService: validacija da subCategory mora pripadati odabranoj category, subCategory obavezan ako category ima potkategorije, property dopušten samo ako subCategory.allowsProperty i mora pripadati trenutnom korisniku; svi write putevi grade response iz eksplicitno učitanih varijabli (isti LazyInitializationException/merge-proxy obrazac naučen na SubCategory ranije danas)
+Implementiran PaymentSlipController na /api/payment-slips — GET s filterima, GET/{id}, POST, PUT, PATCH /status (upisuje PaymentSlipAudit samo ako se status stvarno promijenio), DELETE, GET /{id}/audit; bez @PreAuthorize, vlasništvo štiti service sloj (isti obrazac kao Property)
+Proaktivno dodane FK provjere prije brisanja u CategoryService, SubCategoryService, PropertyService (existsByCategoryId/existsBySubCategoryId/existsByPropertyId na PaymentSlipRepository) — sad kad PaymentSlip može referencirati sve troje, brisanje bi bez provjere palo na neuhvaćeni DataIntegrityViolationException
+Razjašnjena razlika PATCH vs PUT (na korisnikovo pitanje) — PATCH je ispravan izbor za /status jer mijenja samo jedno polje, ne cijelu reprezentaciju resursa
+Implementiran Dashboard: DashboardSummaryResponse, CategoryAmountResponse, PayerAmountResponse (kasnije preimenovan), TimelinePointResponse DTO-ovi; PaymentSlipRepository dobio tri agregacijska upita (sumAmountGroupedByCategory/ByPayer kroz JPQL SELECT NEW constructor expression, sumAmountGroupedByMonth kroz native SQL s TO_CHAR(due_date, 'YYYY-MM') jer JPQL nema prenosivu date-trunc funkciju)
+DashboardService.getSummary ponovno koristi Specification obrazac iz PaymentSlipService (opcionalni categoryId/payerName filter), zbraja plaćeno/neplaćeno u memoriji; getByCategory/getByPayer/getTimeline su čisti DB-level GROUP BY upiti bez filtera
+DashboardController na /api/dashboard — GET /summary, /by-category, /by-payer (kasnije /by-provider), /timeline
+Otkrivena i riješena greška kod brisanja PaymentSlip koji ima PaymentSlipAudit povijest — FK violation na payment_slip_audits. Za razliku od Category/SubCategory/Property (gdje se brisanje blokira jer su djeca neovisne vrijednosti), ovdje je ispravno rješenje suprotno: PaymentSlipAudit je podređeni zapis bez smisla bez svog PaymentSlipa, pa PaymentSlipService.delete() sad eksplicitno briše audit zapise prije brisanja uplatnice, unutar @Transactional metode radi atomarnosti
+Na korisnikovo zapažanje, preimenovan payerName → providerName kroz cijeli backend (PaymentSlip, RecurringPattern entiteti; DTO-ovi; PayerAmountResponse → ProviderAmountResponse; repository/service/controller filteri; Dashboard ruta /by-payer → /by-provider) — izvorni naziv payerName bio je pogrešan jer "payer" znači osoba koja plaća (korisnik), a polje zapravo opisuje davatelja usluge koji prima uplatu (dosljedno s iban poljem koje je već bilo "IBAN primatelja")
+Korisnik ručno testirao cijeli Dashboard controller sa stvarnim uplatnicama i iznosima — radi ispravno
+Ažuriran CLAUDE.md: trenutno stanje, domenski model (providerName umjesto payerName, napomena o cascade-delete iznimci za PaymentSlipAudit), plan REST ruta (/by-provider), sljedeći koraci
+
+Problemi i rješenja
+
+DataIntegrityViolationException kod brisanja PaymentSlip s postojećom PaymentSlipAudit poviješću — riješeno eksplicitnim cascade brisanjem audit zapisa u service sloju prije brisanja uplatnice (suprotno od Category/SubCategory/Property obrasca — ovdje se brise, ne blokira)
+payerName je bio semantički pogrešan naziv (payer = onaj koji plaća, polje opisuje primatelja/davatelja usluge) — preimenovan u providerName kroz cijeli stack
+
+Sutra
+
+MinIO image upload (POST /payment-slips/{id}/image) — nova infrastruktura, MinIO klijent, bucket konfiguracija
+UserDevice, Notification, Admin REST endpointi
+Razmotriti početak sliptrack-mobile (Expo init) s obzirom na rok
