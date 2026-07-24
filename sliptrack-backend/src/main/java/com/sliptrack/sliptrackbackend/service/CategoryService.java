@@ -4,6 +4,7 @@ import com.sliptrack.sliptrackbackend.dto.CategoryRequest;
 import com.sliptrack.sliptrackbackend.dto.CategoryResponse;
 import com.sliptrack.sliptrackbackend.model.Category;
 import com.sliptrack.sliptrackbackend.repository.CategoryRepository;
+import com.sliptrack.sliptrackbackend.repository.SubCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.util.List;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final SubCategoryRepository subCategoryRepository;
 
     public List<CategoryResponse> getAll() {
         return categoryRepository.findAll().stream()
@@ -53,6 +55,12 @@ public class CategoryService {
 
     public void delete(Long id) {
         Category category = findByIdOrThrow(id);
+
+        if (subCategoryRepository.existsByCategoryId(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Kategorija ima potkategorije — prvo ih obriši ili premjesti u drugu kategoriju");
+        }
+
         categoryRepository.delete(category);
     }
 

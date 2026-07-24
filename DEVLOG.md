@@ -73,3 +73,40 @@ Sutra
 
 Implementirati Property CRUD (vlasništvo vezano uz User, veza samo uz kategoriju "komunalije")
 Krenuti na PaymentSlip (najsloženiji entitet — Category, Property, User, MinIO upload slike, PaymentSlipAudit pri promjeni statusa)
+
+24.07.2026. — Dan 4
+Što je napravljeno
+
+Razjašnjena veza Property ↔ Category: Property nema izravnu vezu na Category, nego se veže isključivo kroz PaymentSlip (property je oznaka lokacije na uplatnici, ne vlasništvo kategorije)
+Uočeno da je izvorni plan ("Property se veže samo uz kategoriju komunalije") preopćenit — pravilo mora vrijediti na razini konkretne usluge (npr. Struja), ne cijele kategorije Komunalije
+Uveden dvorazinski model kategorija: Category (npr. Komunalije, Zdravstvo) → SubCategory (npr. Struja, Voda, Plin unutar Komunalije)
+Kreiran SubCategory entitet: id, name, allowsProperty, category (ManyToOne), createdAt — unique constraint na (name, category_id)
+allowsProperty flag premješten s Category na SubCategory (prvotno je bio kratkotrajno dodan na Category, potom uklonjen istog dana kad je odlučeno uvesti SubCategory razinu)
+Kreiran SubCategoryRepository, SubCategoryRequest/SubCategoryResponse DTO-ovi, SubCategoryService, SubCategoryController
+Rute /api/subcategories prate isti obrazac autorizacije kao Category: GET javan svim autenticiranim korisnicima, POST/PUT/DELETE ograničeni na ADMIN
+GET /api/subcategories podržava opcionalni query param categoryId za filtriranje
+Dogovoreno da PaymentSlip.subCategory ostaje nullable na razini baze, ali će service sloj (pri implementaciji PaymentSlip) validirati da je subCategory obavezan ako kategorija ima definirane potkategorije
+Ažuriran CLAUDE.md: domenski model (Category, SubCategory, Property, PaymentSlip), plan REST ruta (dodan /api/subcategories, PaymentSlip GET query params prošireni sa subCategoryId), trenutno stanje, sljedeći koraci
+Implementiran Property CRUD: PropertyRepository (findByUserId, findByIdAndUserId), PropertyRequest/PropertyResponse DTO-ovi, PropertyService, PropertyController na /api/properties
+Kreiran CurrentUserService (paket security) — reusable helper koji resolva trenutnog autenticiranog korisnika iz SecurityContext (po emailu), prvi put korišten za vlasništvo nad Property; planiran za ponovnu upotrebu kod PaymentSlip
+Property rute nemaju @PreAuthorize — svaki autenticirani korisnik smije upravljati vlastitim nekretninama, vlasništvo se provjerava isključivo u service sloju (findByIdAndUserId); pristup tuđoj nekretnini vraća 404 umjesto 403 da se ne otkriva postojanje tuđeg resursa
+Dodan GlobalExceptionHandler (@RestControllerAdvice, paket exception) koji centralizira sve HTTP error odgovore u dosljedan {"message": "..."} format (ili {"polje": "poruka"} za validaciju), umjesto Bootovog default formata s trace/timestamp/path
+Handler pokriva redom: MethodArgumentNotValidException (400), ResponseStatusException (status iz iznimke), AuthorizationDeniedException (403 — Spring Security 6.3+ zamjena za AccessDeniedException kod @PreAuthorize odbijanja), catch-all Exception (500, s @Slf4j logiranjem punog stack tracea server-side prije nego se klijentu vrati generička poruka)
+Dodan eksplicitni AuthenticationEntryPoint bean u SecurityConfig — neautenticirani zahtjevi sad vraćaju 401 (piše JSON izravno u response) umjesto defaultnog Spring Security 403 ponašanja (Http403ForbiddenEntryPoint, aktivan kad nema httpBasic()/formLogin() konfiguriranog)
+Otkriven i riješen LazyInitializationException na SubCategoryService.getAll()/getById() — SubCategory.category je LAZY, a open-in-view=false zatvara sesiju čim repository poziv završi; toResponse() je čitao category.getName() izvan sesije. Riješeno s @EntityGraph(attributePaths = "category") na SubCategoryRepository.findAll()/findById()/findByCategoryId() — eager učitavanje na razini upita umjesto oslanjanja na otvorenu transakciju
+Otkriven drugi, uzročno različit LazyInitializationException na SubCategoryService.update() — repository.save() na entitetu s postojećim ID-om zove Hibernate merge(), koji bez cascade=MERGE na asocijaciji vraća nov neinicijaliziran proxy za category na vraćenom entitetu, čak i kad je asocijacija bila eager učitana prije save(). Riješeno građenjem response DTO-a iz already-loaded category varijable umjesto iz savedEntity.getCategory()
+Razjašnjeno (na korisnikovo pitanje) zašto je @Transactional na AuthService.refresh() ispravan pristup za RefreshToken.getUser(), a nije bio dovoljan/prikladan generalni fix za SubCategory: kod refresh() sav lazy pristup ostaje unutar iste anotirane metode, dok bi SubCategory zahtijevao da svaka buduća metoda koja dira lazy polje pamti @Transactional — @EntityGraph je strukturno zagarantiran na razini upita, manje krhak
+Otkrivena i riješena greška kod brisanja Category koja ima SubCategory zapise — bez provjere, DB FK constraint je bacao DataIntegrityViolationException koji je završavao kao neuhvaćeni 500. Dodana provjera subCategoryRepository.existsByCategoryId(id) u CategoryService.delete() prije brisanja → sad vraća 409 s jasnom porukom; cascade-delete namjerno izbjegnut jer bi u budućnosti tiho brisao PaymentSlip zapise
+Korisnik ručno testirao apsolutno sve dosad implementirane kontrolere (Auth, Category, SubCategory, Property) kroz Postman
+
+Problemi i rješenja
+
+Korisnik je odlučio prije nastavka izbrisati sve testne podatke iz baze kako bi mogao unijeti čist inicijalni test-set nakon promjene modela kategorija — implementacija SubCategory-ja pričekana do potvrde da je baza prazna
+LazyInitializationException na SubCategory.category (dva različita uzroka — read strana i update/merge strana), riješeno @EntityGraph + eksplicitno građenje response DTO-a (vidi gore)
+DataIntegrityViolationException kod brisanja Category s postojećim SubCategory zapisima, riješeno provjerom existsByCategoryId() prije delete()
+Spring Security defaultno vraća 403 umjesto 401 za neautenticirane zahtjeve kad nema httpBasic()/formLogin() konfiguriranog — riješeno eksplicitnim AuthenticationEntryPoint
+
+Sutra
+
+Krenuti na PaymentSlip (najsloženiji entitet — Category, SubCategory, Property, User, MinIO upload slike, PaymentSlipAudit pri promjeni statusa; uključuje validaciju subCategory/property pravila i primjenu @EntityGraph obrasca od početka)
+Primijeniti isti FK-provjeri-prije-brisanja obrazac na SubCategory kad PaymentSlip počne referencirati na nju

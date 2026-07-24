@@ -37,18 +37,22 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-23)
+## Trenutno stanje (2026-07-24)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
 - ✅ `spring.jpa.hibernate.ddl-auto=update` — Hibernate sam kreira tablice, nema ručnih migracija (Flyway/Liquibase se ne koristi)
 - ✅ Paketna struktura backenda kreirana (`controller`, `service`, `repository`, `model`, `dto`, `security`, `config`)
-- ✅ JPA entiteti kreirani: `User`, `Category`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit`, `RefreshToken` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
+- ✅ JPA entiteti kreirani: `User`, `Category`, `SubCategory`, `Property`, `PaymentSlip`, `RecurringPattern`, `UserDevice`, `Notification`, `PaymentSlipAudit`, `RefreshToken` (paket `model`), enumi `Role`, `PaymentStatus`, `DevicePlatform` (paket `enums`)
 - ✅ JWT autentifikacija i Spring Security konfiguracija gotovi i testirani (Postman): `POST /api/auth/register`, `/login`, `/refresh`, `/logout`
 - ✅ Access token (15 min) + refresh token (30 dana, hashiran u bazi, rotira se pri svakom refreshu)
 - ✅ Grubi plan REST ruta za sve domenske entitete definiran (vidi "Plan REST ruta" niže)
 - ✅ Category CRUD implementiran i testiran (Postman): `GET/POST/PUT/DELETE /api/categories` — GET javan svim autenticiranim korisnicima, POST/PUT/DELETE ograničeni na ADMIN (`@PreAuthorize`, `@EnableMethodSecurity` dodan u `SecurityConfig`)
-- ❌ Property, PaymentSlip, Dashboard i ostali REST endpointi još nisu implementirani
+- ✅ SubCategory CRUD implementiran i testiran (Postman): `GET/POST/PUT/DELETE /api/subcategories`, isto pravilo autorizacije kao Category; `allowsProperty` flag živi na SubCategory razini (npr. "Struja" unutar "Komunalije"), ne na Category
+- ✅ Property CRUD implementiran i testiran (Postman): `GET/POST/PUT/DELETE /api/properties` — bez `@PreAuthorize`, vlasništvo se štiti isključivo u service sloju preko `CurrentUserService` (novi helper u `security` paketu, resolvao trenutnog korisnika iz `SecurityContext` po emailu); pristup tuđoj nekretnini vraća `404`, ne `403` (ne otkriva postojanje tuđih resursa)
+- ✅ Globalno rukovanje greškama: `GlobalExceptionHandler` (`@RestControllerAdvice`, paket `exception`) hvata `MethodArgumentNotValidException` (400, `polje → poruka` mapa), `ResponseStatusException` (status iz iznimke + `message`), `AuthorizationDeniedException` (403, zamjena za staru `AccessDeniedException` u Spring Security 6.3+), i catch-all `Exception` (500, generička poruka klijentu + pun stack trace u server log preko `@Slf4j`) — svi odgovori u dosljednom `{"message": "..."}` formatu, bez curenja internih detalja
+- ✅ `SecurityConfig` dobio eksplicitni `AuthenticationEntryPoint` bean — neautenticirani zahtjevi sad vraćaju `401` (piše JSON direktno u response, ne ide kroz `/error`), umjesto defaultnog Spring Security `403` (`Http403ForbiddenEntryPoint`) koji se koristi kad nema konfiguriranog `httpBasic()`/`formLogin()`
+- ❌ PaymentSlip, Dashboard i ostali REST endpointi još nisu implementirani
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -73,14 +77,18 @@ com.sliptrack.sliptrackbackend/
 **User**
 - id, email, password, firstName, lastName, active, role (USER / ADMIN), createdAt
 
-**Category** (kreira samo ADMIN; korisnici samo biraju)
+**Category** (kreira samo ADMIN; korisnici samo biraju) — najviša razina, npr. "Komunalije", "Zdravstvo"
 - id, name, createdAt
 
-**Property** — stambeni prostor (npr. "Stan Zagreb", "Vikendica"); veže se **samo** uz kategoriju "komunalije"
+**SubCategory** (kreira samo ADMIN) — konkretna usluga unutar kategorije, npr. "Struja", "Voda" unutar "Komunalije"; `ManyToOne` na Category
+- id, name, allowsProperty (dopušta li ova potkategorija vezivanje uz Property), category, createdAt
+- `allowsProperty` je namjerno na SubCategory razini, ne na Category — cijela kategorija "Komunalije" je preopćenita (npr. "Komunalna naknada" ne veže se uz specifičan Property na isti način kao "Struja")
+
+**Property** — stambeni prostor (npr. "Stan Zagreb", "Vikendica"); nema izravnu vezu na Category/SubCategory — veže se kroz PaymentSlip, i to samo kad `paymentSlip.subCategory.allowsProperty == true`
 - id, name, address, user (vlasnik)
 
 **PaymentSlip** — uplatnica
-- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), payerName (naziv davatelja), description, dueDate, status (PAID / UNPAID), imageUrl, category, property (nullable), user, createdAt, scannedAt
+- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), payerName (naziv davatelja), description, dueDate, status (PAID / UNPAID), imageUrl, category, subCategory (nullable — obavezan ako Category ima definirane SubCategory zapise, inače ostaje null), property (nullable, samo ako subCategory.allowsProperty), user, createdAt, scannedAt
 
 Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva samo `imageUrl`.
 
@@ -129,6 +137,34 @@ IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...
 - Svaki korisnik vidi samo svoje uplatnice
 - Admin nema pristup tuđim financijskim podacima
 
+## Rukovanje greškama
+
+`GlobalExceptionHandler` (`com.sliptrack.sliptrackbackend.exception`) centralizira sve HTTP odgovore na greške kroz cijeli API — svi vraćaju `{"message": "..."}` (ili `{"polje": "poruka"}` za validaciju), nikad sirovi Spring/Boot format s `trace`/`timestamp`/`path`.
+
+| Iznimka | Status | Izvor |
+|---|---|---|
+| `MethodArgumentNotValidException` | 400 | `@Valid` na `@RequestBody` DTO-ovima |
+| `AuthenticationEntryPoint` (SecurityConfig, ne ide kroz handler) | 401 | zahtjev bez valjanog JWT-a |
+| `AuthorizationDeniedException` | 403 | `@PreAuthorize` odbija (npr. USER na ADMIN-only rutu) |
+| `ResponseStatusException` | status iz iznimke (404/409/...) | ručno bačeno u service sloju (npr. `findByIdOrThrow`) |
+| `Exception` (catch-all) | 500 | neočekivano — puni stack trace ide u server log (`@Slf4j`), klijent dobiva samo generičku poruku |
+
+Napomena o `application.properties`: nema `server.error.*` konfiguracije — `spring-boot-devtools` u dev profilu sam postavlja `include-stacktrace`/`include-message` na `ALWAYS`, zato se stari (pred-`GlobalExceptionHandler`) odgovori vidljivi u Postmanu s punim trace-om — to je devtools ponašanje, ne bug. U produkciji (bez devtools) taj isti fallback bi vratio generički odgovor bez trace-a, ali `GlobalExceptionHandler` sad daje kontroliran, dosljedan format neovisno o devtools okruženju.
+
+### LazyInitializationException — obrazac za buduće entitete (PaymentSlip!)
+
+`spring.jpa.open-in-view=false` znači da se Hibernate sesija zatvara čim repository poziv završi — svaki `@ManyToOne(fetch = LAZY)` pristupljen izvan te sesije baca `LazyInitializationException`. Naučeno na `SubCategory.category`:
+
+- **Read strana** (`getAll`/`getById`): repository metode moraju eksplicitno eager-učitati asocijaciju — `@EntityGraph(attributePaths = "...")` na `findAll()`/`findById()`/custom finder metodama. Ne osloniti se na `@Transactional` na servisnoj metodi ako se mapiranje u DTO (`toResponse`) može pozvati i iz konteksta gdje transakcija nije garantirana — `@EntityGraph` je strukturno zagarantiran na razini upita, `@Transactional` ovisi o disciplini da svaka buduća metoda koja dira lazy polje bude anotirana.
+- **Update strana**: `repository.save()` na entitetu s postojećim ID-om zove Hibernateov `merge()`, koji bez `cascade = MERGE` na asocijaciji vraća **nov, neinicijaliziran proxy** za tu asocijaciju na vraćenom (merged) entitetu — čak i ako je asocijacija bila potpuno učitana prije `save()`. Rješenje: graditi response DTO koristeći objekt koji je servis već eksplicitno i potpuno učitao (npr. `findCategoryOrThrow(...)` rezultat), ne `savedEntity.getAsociacija()`.
+- `AuthService.refresh()` koristi `@Transactional` i to je ispravno — cijeli lazy pristup (`refreshToken.getUser()`) događa se unutar te iste anotirane metode, nema curenja proxy-ja van transakcijske granice. `@Transactional` nije "loš" pristup, samo je prikladniji za usku, jednokratnu operaciju nego za read endpoint koji vraća listu i prolazi kroz odvojeni mapper.
+
+`PaymentSlip` će imati više `@ManyToOne` veza (`category`, `subCategory`, `property`, `user`) — primijeniti isti `@EntityGraph` obrazac odmah, ne čekati da se greška pojavi.
+
+### FK constraint prije brisanja
+
+Kad entitet ima djecu preko `@ManyToOne` (npr. `Category` ← `SubCategory`), `delete()` u service sloju mora provjeriti `existsByParentId()` prije brisanja i vratiti `409 Conflict` s jasnom porukom — ne pustiti da DB FK constraint padne i završi kao neuhvaćeni `500` (`DataIntegrityViolationException`). Cascade-delete je namjerno izbjegnut (npr. brisanje Category ne smije tiho obrisati SubCategory i posljedično PaymentSlip zapise — financijski podaci se ne smiju tiho gubiti). Isti obrazac primijeniti na `SubCategory` kad `PaymentSlip` počne referencirati na nju.
+
 ## Plan REST ruta (domenski entiteti)
 
 Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje" znači da se filtriranje po `user` radi u service sloju (iz `SecurityContext`), ne kroz `SecurityConfig`.
@@ -142,6 +178,15 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 | PUT | `/api/categories/{id}` | Izmjena kategorije | ADMIN |
 | DELETE | `/api/categories/{id}` | Brisanje kategorije | ADMIN |
 
+### SubCategory `/api/subcategories`
+| Metoda | Ruta | Opis | Autorizacija |
+|---|---|---|---|
+| GET | `/api/subcategories?categoryId=` | Lista potkategorija, opcionalni filter po kategoriji | svi autenticirani |
+| GET | `/api/subcategories/{id}` | Detalji potkategorije | svi autenticirani |
+| POST | `/api/subcategories` | Nova potkategorija (body uključuje `categoryId`) | ADMIN |
+| PUT | `/api/subcategories/{id}` | Izmjena potkategorije (uklj. premještanje u drugu kategoriju) | ADMIN |
+| DELETE | `/api/subcategories/{id}` | Brisanje potkategorije | ADMIN |
+
 ### Property `/api/properties`
 | Metoda | Ruta | Opis | Autorizacija |
 |---|---|---|---|
@@ -154,7 +199,7 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 ### PaymentSlip `/api/payment-slips`
 | Metoda | Ruta | Opis | Autorizacija |
 |---|---|---|---|
-| GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `payerName`, `dueDateFrom/To` | USER (samo svoje) |
+| GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `subCategoryId`, `payerName`, `dueDateFrom/To` | USER (samo svoje) |
 | GET | `/api/payment-slips/{id}` | Detalji uplatnice | USER (vlasnik) |
 | POST | `/api/payment-slips` | Nova uplatnica (ručni unos ili nakon skeniranja) | USER |
 | POST | `/api/payment-slips/{id}/image` | Upload slike u MinIO, upiše `imageUrl` | USER (vlasnik) |
@@ -201,9 +246,11 @@ Napomene:
 2. ✅ Kreirati JPA entitete i enume
 3. ✅ Kreirati Repository sučelja (Spring Data JPA) — zasad `UserRepository`, `RefreshTokenRepository`
 4. ✅ JWT autentifikacija + Spring Security konfiguracija (access + refresh token)
-5. REST endpointi za domenske entitete (controller + service sloj: PaymentSlip, Category, Property, Dashboard...)
+5. REST endpointi za domenske entitete (controller + service sloj: PaymentSlip, Category, SubCategory, Property, Dashboard...)
    - ✅ Category (gotovo i testirano)
-   - ❌ Property, PaymentSlip, Dashboard, UserDevice, Notification, Admin
+   - ✅ SubCategory (gotovo i testirano)
+   - ✅ Property (gotovo i testirano)
+   - ❌ PaymentSlip, Dashboard, UserDevice, Notification, Admin
 6. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
 7. React admin sučelje
 8. Testiranje
