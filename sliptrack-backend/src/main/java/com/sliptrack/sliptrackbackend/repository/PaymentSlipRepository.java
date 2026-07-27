@@ -1,5 +1,6 @@
 package com.sliptrack.sliptrackbackend.repository;
 
+import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.ProviderAmountResponse;
 import com.sliptrack.sliptrackbackend.model.PaymentSlip;
@@ -56,4 +57,13 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
             ORDER BY period
             """, nativeQuery = true)
     List<Object[]> sumAmountGroupedByMonth(@Param("userId") Long userId);
+
+    @Query("""
+            SELECT new com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse(
+                p.category.id, p.category.name, COUNT(p))
+            FROM PaymentSlip p
+            GROUP BY p.category.id, p.category.name
+            ORDER BY COUNT(p) DESC
+            """)
+    List<AdminCategoryCountResponse> countGroupedByCategory();
 }

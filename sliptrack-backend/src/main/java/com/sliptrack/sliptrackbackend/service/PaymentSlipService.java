@@ -13,6 +13,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
@@ -28,6 +29,7 @@ public class PaymentSlipService {
     private final SubCategoryRepository subCategoryRepository;
     private final PropertyRepository propertyRepository;
     private final CurrentUserService currentUserService;
+    private final PaymentSlipImageService paymentSlipImageService;
 
     public List<PaymentSlipResponse> getAll(PaymentStatus status, Long categoryId, Long subCategoryId,
                                              String providerName, LocalDate dueDateFrom, LocalDate dueDateTo) {
@@ -137,11 +139,30 @@ public class PaymentSlipService {
         return toResponse(saved, paymentSlip.getCategory(), paymentSlip.getSubCategory(), paymentSlip.getProperty());
     }
 
+    public PaymentSlipResponse uploadImage(Long id, MultipartFile file) {
+        User currentUser = currentUserService.getCurrentUser();
+        PaymentSlip paymentSlip = findOwnedOrThrow(id);
+
+        if (paymentSlip.getImageKey() != null) {
+            paymentSlipImageService.delete(paymentSlip.getImageKey());
+        }
+
+        String key = paymentSlipImageService.upload(currentUser.getId(), id, file);
+        paymentSlip.setImageKey(key);
+        PaymentSlip saved = paymentSlipRepository.save(paymentSlip);
+
+        return toResponse(saved, paymentSlip.getCategory(), paymentSlip.getSubCategory(), paymentSlip.getProperty());
+    }
+
     @Transactional
     public void delete(Long id) {
         PaymentSlip paymentSlip = findOwnedOrThrow(id);
         paymentSlipAuditRepository.deleteByPaymentSlipId(id);
         paymentSlipRepository.delete(paymentSlip);
+
+        if (paymentSlip.getImageKey() != null) {
+            paymentSlipImageService.delete(paymentSlip.getImageKey());
+        }
     }
 
     public List<PaymentSlipAuditResponse> getAudit(Long id) {
@@ -218,7 +239,7 @@ public class PaymentSlipService {
                 .description(paymentSlip.getDescription())
                 .dueDate(paymentSlip.getDueDate())
                 .status(paymentSlip.getStatus())
-                .imageUrl(paymentSlip.getImageUrl())
+                .imageUrl(paymentSlipImageService.getPresignedUrl(paymentSlip.getImageKey()))
                 .categoryId(category == null ? null : category.getId())
                 .categoryName(category == null ? null : category.getName())
                 .subCategoryId(subCategory == null ? null : subCategory.getId())

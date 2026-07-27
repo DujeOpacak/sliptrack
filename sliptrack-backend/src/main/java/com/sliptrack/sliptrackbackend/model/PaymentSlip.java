@@ -43,7 +43,7 @@ public class PaymentSlip {
     @Builder.Default
     private PaymentStatus status = PaymentStatus.UNPAID;
 
-    private String imageUrl;
+    private String imageKey;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)

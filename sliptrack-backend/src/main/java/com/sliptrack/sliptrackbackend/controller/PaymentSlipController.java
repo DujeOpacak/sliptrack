@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -47,6 +48,11 @@ public class PaymentSlipController {
     @PutMapping("/{id}")
     public ResponseEntity<PaymentSlipResponse> update(@PathVariable Long id, @Valid @RequestBody PaymentSlipRequest request) {
         return ResponseEntity.ok(paymentSlipService.update(id, request));
+    }
+
+    @PostMapping("/{id}/image")
+    public ResponseEntity<PaymentSlipResponse> uploadImage(@PathVariable Long id, @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(paymentSlipService.uploadImage(id, file));
     }
 
     @PatchMapping("/{id}/status")

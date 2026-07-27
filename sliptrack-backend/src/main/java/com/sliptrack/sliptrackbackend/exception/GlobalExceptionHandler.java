@@ -8,6 +8,8 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
@@ -42,6 +44,18 @@ public class GlobalExceptionHandler {
         Map<String, String> error = new HashMap<>();
         error.put("message", "Nemate ovlasti za ovu akciju");
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<Map<String, String>> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", "Slika je prevelika (maksimalno 10MB)"));
+    }
+
+    @ExceptionHandler(MultipartException.class)
+    public ResponseEntity<Map<String, String>> handleMultipart(MultipartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("message", "Slika je obavezna"));
     }
 
     @ExceptionHandler(Exception.class)

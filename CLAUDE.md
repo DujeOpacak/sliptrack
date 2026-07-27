@@ -37,7 +37,7 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-25)
+## Trenutno stanje (2026-07-27)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
@@ -54,7 +54,11 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ `SecurityConfig` dobio eksplicitni `AuthenticationEntryPoint` bean — neautenticirani zahtjevi sad vraćaju `401` (piše JSON direktno u response, ne ide kroz `/error`), umjesto defaultnog Spring Security `403` (`Http403ForbiddenEntryPoint`) koji se koristi kad nema konfiguriranog `httpBasic()`/`formLogin()`
 - ✅ PaymentSlip core CRUD implementiran i testiran (Postman): `GET/POST/PUT/PATCH/DELETE /api/payment-slips` + `GET /{id}/audit` — dinamičko filtriranje preko `JpaSpecificationExecutor` (`status`, `categoryId`, `subCategoryId`, `providerName`, `dueDateFrom/To`), validacija subCategory/property pravila u service sloju, `PATCH /status` upisuje `PaymentSlipAudit` samo kad se status stvarno promijeni; MinIO image upload (`POST /{id}/image`) namjerno odgođen kao zaseban korak
 - ✅ Dashboard implementiran i testiran (Postman): `GET /api/dashboard/summary` (filtriran po `categoryId`/`providerName`), `/by-category`, `/by-provider`, `/timeline` (grupirano po mjesecu `dueDate`-a, native SQL `TO_CHAR`) — sve scoped na trenutnog korisnika
-- ❌ MinIO image upload, UserDevice, Notification, Admin endpointi još nisu implementirani
+- ✅ MinIO image upload implementiran i testiran (Postman): `POST /api/payment-slips/{id}/image` — `PaymentSlip.imageKey` u bazi sprema MinIO object key (`payment-slips/{userId}/{paymentSlipId}/{uuid}.{ext}`), `PaymentSlipResponse.imageUrl` se generira on-demand kao presigned URL (istek 15 min) pri svakom GET-u; bucket (`payment-slip-images`) se auto-kreira pri startu app-a (`MinioConfig`, `bucketExists`/`makeBucket`); zamjena slike briše stari objekt, brisanje uplatnice briše pripadajući objekt iz MinIO; validacija tipa (JPEG/PNG) i max veličine (10MB) u `PaymentSlipImageService`, `spring.servlet.multipart.max-file-size/max-request-size=10MB` usklađeno s tim limitom
+- ✅ UserDevice implementiran i testiran (Postman): `POST /api/devices` (upsert po `deviceToken` — reasignira uređaj na trenutnog korisnika ako token već postoji, npr. reinstall pod drugim računom), `DELETE /api/devices/{id}`
+- ✅ Notification implementiran i testiran (Postman): `GET /api/notifications`, `PATCH /api/notifications/{id}/read` — nema create endpoint (namjerno, upisivat će ga budući `@Scheduled` podsjetnik-job)
+- ✅ Admin implementiran i testiran (Postman): `GET /api/admin/users` (bez financijskih podataka), `PATCH /api/admin/users/{id}/activate|deactivate` (blokirano samo-deaktiviranje admina), `GET /api/admin/stats` (totalUsers/activeUsers/totalPaymentSlips/topCategories — top 5 po broju, bez iznosa)
+- ❌ Svi REST endpointi iz plana sad implementirani. Preostaje: `@Scheduled` job za automatske podsjetnike (analiza `RecurringPattern`, slanje push notifikacija kroz Expo Notifications API — funkcionalnost iz "Funkcionalnosti — mobilna app" #4, nije REST endpoint pa nije bila na popisu ruta) i cijeli mobilni/admin frontend
 - ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -90,9 +94,9 @@ com.sliptrack.sliptrackbackend/
 - id, name, address, user (vlasnik)
 
 **PaymentSlip** — uplatnica
-- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), providerName (naziv davatelja usluge — primatelja uplate, ne osobe koja plaća; nazvano `providerName` a ne `payerName` da se ne miješa s korisnikom koji plaća), description, dueDate, status (PAID / UNPAID), imageUrl, category, subCategory (nullable — obavezan ako Category ima definirane SubCategory zapise, inače ostaje null), property (nullable, samo ako subCategory.allowsProperty), user, createdAt, scannedAt
+- id, iban, amount, referenceNumber (poziv na broj), paymentModel (HR01, HR02...), providerName (naziv davatelja usluge — primatelja uplate, ne osobe koja plaća; nazvano `providerName` a ne `payerName` da se ne miješa s korisnikom koji plaća), description, dueDate, status (PAID / UNPAID), imageKey, category, subCategory (nullable — obavezan ako Category ima definirane SubCategory zapise, inače ostaje null), property (nullable, samo ako subCategory.allowsProperty), user, createdAt, scannedAt
 
-Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva samo `imageUrl`.
+Slike uplatnica se **ne** spremaju u PostgreSQL — idu u MinIO, u bazi se čuva samo `imageKey` (MinIO object key, npr. `payment-slips/{userId}/{paymentSlipId}/{uuid}.jpg`), ne URL. Bucket je privatan; `PaymentSlipResponse.imageUrl` se generira on-demand kao presigned URL (istek 15 min) pri svakom GET-u preko `PaymentSlipImageService`, umjesto da se sprema trajni public URL — uplatnica sadrži financijske podatke (IBAN, iznos, poziv na broj) pa slika ne smije biti dostupna bez autentikacije bilo kome tko procuri/pogodi URL, dosljedno s ostatkom sustava gdje se vlasništvo štiti u service sloju.
 
 **RecurringPattern** — analiza obrasca plaćanja po davatelju, podloga za automatske podsjetnike
 - id, user, providerName, averageDayOfMonth, averageAmount, lastPaymentDate, nextPredictedDate, updatedAt
@@ -206,7 +210,7 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 | GET | `/api/payment-slips` | Lista uplatnica, query params: `status`, `categoryId`, `subCategoryId`, `providerName`, `dueDateFrom/To` | USER (samo svoje) |
 | GET | `/api/payment-slips/{id}` | Detalji uplatnice | USER (vlasnik) |
 | POST | `/api/payment-slips` | Nova uplatnica (ručni unos ili nakon skeniranja) | USER |
-| POST | `/api/payment-slips/{id}/image` | Upload slike u MinIO, upiše `imageUrl` | USER (vlasnik) |
+| POST | `/api/payment-slips/{id}/image` | Upload slike u MinIO, upiše `imageKey` | USER (vlasnik) |
 | PUT | `/api/payment-slips/{id}` | Izmjena podataka uplatnice | USER (vlasnik) |
 | PATCH | `/api/payment-slips/{id}/status` | Promjena statusa PAID/UNPAID → upisuje `PaymentSlipAudit` | USER (vlasnik) |
 | DELETE | `/api/payment-slips/{id}` | Brisanje uplatnice | USER (vlasnik) |
@@ -256,10 +260,14 @@ Napomene:
    - ✅ Property (gotovo i testirano)
    - ✅ PaymentSlip core CRUD (gotovo i testirano) — MinIO image upload odgođen kao zaseban korak
    - ✅ Dashboard (gotovo i testirano)
-   - ❌ MinIO image upload, UserDevice, Notification, Admin
-6. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
-7. React admin sučelje
-8. Testiranje
+   - ✅ MinIO image upload (gotovo i testirano)
+   - ✅ UserDevice (gotovo i testirano)
+   - ✅ Notification (gotovo i testirano)
+   - ✅ Admin (gotovo i testirano)
+6. Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API)
+7. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
+8. React admin sučelje
+9. Testiranje
 
 ## Pokretanje lokalno
 

@@ -141,3 +141,45 @@ Sutra
 MinIO image upload (POST /payment-slips/{id}/image) — nova infrastruktura, MinIO klijent, bucket konfiguracija
 UserDevice, Notification, Admin REST endpointi
 Razmotriti početak sliptrack-mobile (Expo init) s obzirom na rok
+
+27.07.2026. — Dan 5
+Što je napravljeno
+
+Implementiran MinIO image upload: POST /api/payment-slips/{id}/image
+Dogovoreno da se slika sprema za svaki scan/priloženu fotografiju uplatnice (jedan endpoint za oba slučaja) jer je arhiviranje vizualnog dokaza originala dio glavne vrijednosti rada (digitalizacija papirnate uplatnice), ne samo izvučenih podataka
+Dogovoreno da imageUrl bude presigned URL s istekom (15 min), ne trajni public URL — uplatnica sadrži financijske podatke (IBAN, iznos, poziv na broj), pa bi trajni javni URL bio nekonzistentan s ostatkom sustava koji već štiti vlasništvo nad Property/PaymentSlip u service sloju
+Dodan io.minio:minio SDK u pom.xml
+Kreiran MinioConfig (paket config) — MinioClient bean, bucket (payment-slip-images) se provjerava i auto-kreira (bucketExists/makeBucket) direktno unutar bean metode pri startu app-a, bez ručnog koraka u MinIO konzoli
+Preimenovano PaymentSlip.imageUrl → imageKey — u bazi se sad sprema MinIO object key (payment-slips/{userId}/{paymentSlipId}/{uuid}.{ext}), ne URL; imageUrl naziv ostaje samo u PaymentSlipResponse gdje stvarno predstavlja URL
+Kreiran PaymentSlipImageService: upload (validacija tipa JPEG/PNG i max veličine 10MB), delete, getPresignedUrl (istek 15 min)
+PaymentSlipService.toResponse sad generira presigned URL iz imageKey pri svakom pozivu (on-demand, ne cachira se); uploadImage() briše stariju sliku iz MinIO prije uploada nove (zamjena, ne akumulacija); delete() briše pripadajući MinIO objekt nakon brisanja DB retka
+Dodano spring.servlet.multipart.max-file-size/max-request-size=10MB u application.properties — bez ovoga bi Spring odbijao uploade već iznad defaultnog 1MB limita prije nego stignu do PaymentSlipImageService validacije
+Ručno testirano kroz Postman: uspješan upload, presigned URL radi u browseru i mijenja se pri svakom GET-u, zamjena slike briše stari objekt iz bucketa (potvrđeno u MinIO konzoli), brisanje uplatnice briše sliku, upload na tuđu uplatnicu vraća 404, pogrešan tip datoteke i prevelika datoteka vraćaju 400
+Ažuriran CLAUDE.md: trenutno stanje, domenski model (imageKey umjesto imageUrl na PaymentSlip, obrazloženje presigned pristupa), plan REST ruta, sljedeći koraci
+
+Problemi i rješenja
+
+MaxUploadSizeExceededException (Spring baca prije nego zahtjev stigne do controllera, kad multipart request premaši server-side limit) upadala je u GlobalExceptionHandler-ov catch-all Exception i vraćala 500 umjesto 400 — riješeno dodavanjem specifičnog @ExceptionHandler(MaxUploadSizeExceededException.class) koji vraća 400 s jasnom porukom
+MultipartException ("Current request is not a multipart request", kad POST /image stigne bez multipart body-ja uopće) imala isti problem — riješeno dodavanjem @ExceptionHandler(MultipartException.class); MaxUploadSizeExceededException je podklasa, ali Spring bira specifičniji handler pa oba rade neovisno
+
+Sutra
+
+UserDevice, Notification, Admin REST endpointi
+Razmotriti početak sliptrack-mobile (Expo init) s obzirom na rok
+
+Nastavak Dana 5 — UserDevice, Notification, Admin
+Što je napravljeno
+
+Implementiran UserDevice: UserDeviceRepository (findByDeviceToken, findByIdAndUserId), UserDeviceRequest/Response, UserDeviceService, UserDeviceController na /api/devices — POST radi upsert po deviceToken (ako token već postoji, reasignira uređaj na trenutnog korisnika i ažurira platformu, umjesto da baci grešku ili stvori duplikat — pokriva slučaj reinstalacije aplikacije pod drugim računom na istom fizičkom uređaju), DELETE briše po vlasništvu
+Implementiran Notification: NotificationRepository (findByUserIdOrderBySentAtDesc, findByIdAndUserId), NotificationResponse (bez Request DTO-a — nema create endpoint, upisivat će ga budući @Scheduled podsjetnik-job), NotificationService (getAll, markAsRead), NotificationController na /api/notifications
+Razjašnjeno (na korisnikovo pitanje) da response mapiranje Notification.paymentSlip → paymentSlipId ne zahtijeva @EntityGraph iako je asocijacija LAZY — pristup samo getId()-u na neinicijaliziranom proxyju ne triggera LazyInitializationException jer je Hibernateu FK vrijednost već poznata iz same asocijacije, za razliku od ranijeg SubCategory.category.getName() slučaja koji je zahtijevao pun objekt
+Implementiran Admin: UserRepository dobio countByActiveTrue(), PaymentSlipRepository dobio countGroupedByCategory() (sistemski upit, bez filtriranja po korisniku, za razliku od Dashboard upita); AdminUserResponse (bez financijskih podataka), AdminCategoryCountResponse (namjerno bez totalAmount polja — samo count, jer Admin ne smije vidjeti novčane iznose po CLAUDE.md pravilu; nije se ponovno iskoristio postojeći CategoryAmountResponse iz Dashboarda upravo zbog toga), AdminStatsResponse (totalUsers/activeUsers/totalPaymentSlips/topCategories top 5); AdminService, AdminController na /api/admin s @PreAuthorize("hasRole('ADMIN')") na razini cijelog controllera (sve rute su admin-only)
+Proaktivno dodana zaštita u AdminService.deactivate() — admin ne može deaktivirati vlastiti račun (400), jer bi jedini admin inače mogao sam sebe zaključati iz sustava bez ikog tko bi ga mogao reaktivirati
+Potvrđeno da active=false već ispravno blokira login bez dodatne logike — CustomUserDetailsService.disabled(!user.getActive()) je postojao od ranije (Dan 2)
+Sve endpointe (UserDevice, Notification, Admin) korisnik ručno testirao kroz Postman
+Ažuriran CLAUDE.md: trenutno stanje, plan sljedećih koraka (svi domenski REST endpointi iz plana sad gotovi)
+
+Sutra
+
+Razmotriti @Scheduled job za automatske podsjetnike (analiza RecurringPattern, upis Notification, slanje push kroz Expo Notifications API) — backend funkcionalnost koja nije bila na popisu REST ruta jer je nema klijent direktno pozivati
+Ili krenuti na sliptrack-mobile (Expo init) s obzirom na rok
