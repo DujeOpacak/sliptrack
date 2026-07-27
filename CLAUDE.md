@@ -59,7 +59,9 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ Notification implementiran i testiran (Postman): `GET /api/notifications`, `PATCH /api/notifications/{id}/read` — nema create endpoint (namjerno, upisivat će ga budući `@Scheduled` podsjetnik-job)
 - ✅ Admin implementiran i testiran (Postman): `GET /api/admin/users` (bez financijskih podataka), `PATCH /api/admin/users/{id}/activate|deactivate` (blokirano samo-deaktiviranje admina), `GET /api/admin/stats` (totalUsers/activeUsers/totalPaymentSlips/topCategories — top 5 po broju, bez iznosa)
 - ❌ Svi REST endpointi iz plana sad implementirani. Preostaje: `@Scheduled` job za automatske podsjetnike (analiza `RecurringPattern`, slanje push notifikacija kroz Expo Notifications API — funkcionalnost iz "Funkcionalnosti — mobilna app" #4, nije REST endpoint pa nije bila na popisu ruta) i cijeli mobilni/admin frontend
-- ❌ `sliptrack-mobile` i `sliptrack-admin` nisu inicijalizirani
+- ✅ `sliptrack-mobile` inicijaliziran: `create-expo-app` s `blank-typescript` templateom; naknadno spušten s Expo SDK 57 na **SDK 54** (`npx expo install expo@^54.0.0` + `expo install --fix`) jer korisnikov Expo Go na iOS-u (verzija OS-a ne prima noviji Expo Go update) podržava samo do SDK 54 — trenutne verzije: Expo SDK 54, React 19.1.0, React Native 0.81.5, TypeScript 5.9.2
+- ✅ Istražena Expo Go kompatibilnost skeniranja: `expo-camera` PDF417 radi u Expo Go, ML Kit OCR biblioteke zahtijevaju development build (vidi "Plan implementacije skeniranja")
+- ❌ `sliptrack-admin` nije inicijaliziran
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
 
@@ -118,6 +120,37 @@ Enumi (`Role`, `PaymentStatus`, `DevicePlatform`) su u zasebnom paketu `com.slip
 ### Podaci koji se izvlače skeniranjem uplatnice
 
 IBAN primatelja, iznos, poziv na broj primatelja, model plaćanja (HR01, HR02...), naziv davatelja usluge, opis plaćanja, datum dospijeća.
+
+### Plan implementacije skeniranja (dogovoreno, još nije implementirano — `sliptrack-mobile`)
+
+Skeniranje se odvija **isključivo na mobilnoj strani** — backend se ne mijenja, oba puta (barkod i OCR) na kraju šalju isti `POST /api/payment-slips` s već parsiranim i korisnički potvrđenim podacima kroz postojeći `PaymentSlipRequest`.
+
+**Put 1 — PDF417 barkod (primarni).** HUB-3 barkod već sadrži strukturirane podatke kao čisti tekst, polja odvojena `\n`, fiksni redoslijed:
+```
+HRVHUB30
+EUR
+000000000012550          ← iznos, zadnje 2 znamenke centi, bez decimalne točke
+Ime Prezime platitelja
+Adresa platitelja
+Grad platitelja
+HEP ELEKTRA               ← naziv primatelja = providerName
+Ulica primatelja
+Grad primatelja
+HR1210010051863000160     ← IBAN primatelja
+HR01                      ← paymentModel
+1234567890                ← referenceNumber (poziv na broj)
+XXXX                      ← šifra namjene
+Struja - srpanj 2026       ← description
+```
+`expo-camera` (`CameraView`, `barcodeScannerSettings: { barcodeTypes: ['pdf417'] }`) čita barkod on-device, string se parsira split-om po `\n` u čistoj JS funkciji (mapiranje pozicije → polje), rezultat popuni ekran za potvrdu/ispravak (korisnik i dalje ručno bira `categoryId`/`subCategoryId` — to barkod ne nosi).
+
+**Put 2 — OCR (rezervno, kad barkod nema/ne čita se).** Google ML Kit Text Recognition vrati sirovi tekst bez strukture — IBAN/iznos/poziv na broj prepoznaju se regexom/heuristikom (`HR\d{19}` za IBAN i sl.), manje pouzdano od barkoda, zato je ekran za potvrdu/ispravak ovdje kritičan.
+
+**Riješeno — Expo Go vs development build:** `expo-camera` barcode scanning (uklj. `pdf417`) radi u Expo Go bez ikakvih promjena (SDK 57 dokumentacija eksplicitno navodi `expo-go` kao podržanu platformu) — Put 1 i sav ostali razvoj (auth, dashboard, navigation) ide normalno kroz Expo Go. ML Kit OCR biblioteke (`@react-native-ml-kit/text-recognition`, `expo-mlkit-ocr`, `expo-text-extractor`) su sve native moduli izvan skupa koji Expo Go bundla — zahtijevaju **development build** (`expo-dev-client` + `eas build --profile development` ili lokalni prebuild), čak i one pisane kao Expo Modules s config pluginom. Odabrana biblioteka: `expo-text-extractor` ili `expo-mlkit-ocr` (imaju gotov Expo config plugin) umjesto golog `@react-native-ml-kit/text-recognition` (ručno pisanje config plugina). Prijelaz na dev build odgađa se dok se ne krene na Put 2 implementaciju — nema potrebe prebacivati cijeli projekt unaprijed.
+
+**Put 3 — ručni unos.** Isti `PaymentSlipRequest` oblik, bez auto-popunjenih polja.
+
+**Otvoreno:** `PaymentSlip.scannedAt` trenutno nigdje nije postavljen na write strani (`PaymentSlipService.create/update`) — treba odlučiti šalje li mobitel `scannedAt` kao dio requesta ili backend dobiva `wasScanned` flag pa sam postavlja timestamp; kod ručnog unosa mora ostati `null`. Odgoditi odluku dok se ne krene na scan ekrane.
 
 ## Funkcionalnosti — mobilna app (USER)
 
@@ -264,8 +297,11 @@ Napomene:
    - ✅ UserDevice (gotovo i testirano)
    - ✅ Notification (gotovo i testirano)
    - ✅ Admin (gotovo i testirano)
-6. Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API)
-7. React Native mobilna aplikacija (Expo init, skeniranje, dashboard)
+6. **React Native mobilna aplikacija (Expo init, auth, skeniranje, dashboard)** — dogovoreno da ide prije Admin web sučelja i prije podsjetnik-joba: mobile je glavni predmet rada i tehnički najrizičniji dio (kamera, barkod/OCR, native permisije), bolje rano otkriti probleme; podsjetnik-job šalje push na `UserDevice` tokene koji ne postoje dok mobitel ne registrira barem jedan (`POST /api/devices`), pa bi se testirao "na slijepo" bez mobitela. Vidi "Plan implementacije skeniranja" iznad za detalje.
+   - ✅ Expo init (TypeScript template)
+   - ✅ Expo Go vs development build istraženo i riješeno
+   - ❌ Struktura foldera, auth flow protiv `/api/auth`, navigation, skeniranje, dashboard
+7. Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API) — nakon mobitela, kad postoji barem jedan registriran `UserDevice` za stvarno testiranje push notifikacija
 8. React admin sučelje
 9. Testiranje
 

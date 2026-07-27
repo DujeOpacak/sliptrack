@@ -183,3 +183,59 @@ Sutra
 
 Razmotriti @Scheduled job za automatske podsjetnike (analiza RecurringPattern, upis Notification, slanje push kroz Expo Notifications API) — backend funkcionalnost koja nije bila na popisu REST ruta jer je nema klijent direktno pozivati
 Ili krenuti na sliptrack-mobile (Expo init) s obzirom na rok
+
+Nastavak Dana 5 — odluka o redoslijedu (mobile prije admin weba), plan skeniranja
+Što je napravljeno
+
+Dogovoreno da se sliptrack-mobile radi prije Admin web sučelja i prije @Scheduled podsjetnik-joba — mobile je glavni predmet rada (diferencijacija iz obrazloženja teme živi tamo) i tehnički najrizičniji dio (kamera, PDF417/OCR, native permisije), bolje rano otkriti probleme; podsjetnik-job šalje push na UserDevice tokene koji ne postoje dok mobitel ne registrira barem jedan, pa bi se testirao bez ikakve vizualne potvrde
+Razjašnjen cijeli plan skeniranja uplatnice (zapisan u CLAUDE.md, sekcija "Plan implementacije skeniranja"): skeniranje je isključivo mobile-side posao, backend se ne mijenja — oba puta (barkod i OCR) završavaju istim POST /api/payment-slips pozivom s već potvrđenim podacima
+Put 1 (primarni) — PDF417/HUB-3 barkod već sadrži strukturirane podatke kao čisti tekst odvojen \n u fiksnom redoslijedu (iznos, ime/adresa platitelja, providerName, adresa primatelja, IBAN, paymentModel, referenceNumber, šifra namjene, description) — expo-camera čita barkod on-device, parsira se split-om, korisnik svejedno ručno bira category/subCategory jer to barkod ne nosi
+Put 2 (rezervno) — Google ML Kit OCR vraća sirovi tekst bez strukture, IBAN/iznos prepoznaju se regexom, manje pouzdano pa je ekran za potvrdu/ispravak ovdje kritičan; napomena da neki ML Kit React Native wrapperi zahtijevaju "development build" umjesto Expo Go — treba provjeriti prije init-a projekta jer utječe na testni workflow
+Otkriveno da PaymentSlip.scannedAt trenutno nigdje nije postavljen na write strani (PaymentSlipService.create/update) — odluka o tome šalje li ga mobitel eksplicitno ili backend dobiva wasScanned flag odgođena dok se ne krene na scan ekrane
+Objašnjena razlika trajni public URL vs presigned URL za MinIO sliku uplatnice (iz prethodnog dana, ali korisnik tražio dodatno pojašnjenje) — nije nova promjena koda, samo dokumentacijski kontekst
+Pripremljena git commit poruka (summary + description) za korisnika da sam commita kroz GitHub Desktop — pokriva MinIO/UserDevice/Notification/Admin promjene
+Ažuriran CLAUDE.md: nova sekcija "Plan implementacije skeniranja" ispod "Podaci koji se izvlače skeniranjem", redoslijed sljedećih koraka (mobile prije podsjetnik-joba prije admin weba)
+
+Sutra
+
+Kreirati sliptrack-mobile: npx create-expo-app, provjeriti Expo Go kompatibilnost odabranih barkod/OCR biblioteka (development build ako treba), postaviti auth flow protiv postojećeg /api/auth backenda
+
+Nastavak Dana 5 — Expo init, istraženo Expo Go/ML Kit pitanje
+Što je napravljeno
+
+Dogovoreno da se sliptrack-mobile radi u TypeScriptu (ne čisti JavaScript) — pomaže da mobile DTO-ovi ostanu usklađeni s backend PaymentSlipRequest/Response ugovorom
+Pokrenut npx create-expo-app@latest . --template blank-typescript u sliptrack-mobile — Expo SDK 57.0.8, React 19.2.3, React Native 0.86.0, TypeScript 6.0.3
+Template je dodao lokalni CLAUDE.md/AGENTS.md (Expo-ov standardni scaffold koji upućuje na versioned SDK dokumentaciju) i .claude/settings.json — provjereno da su bezopasni, odvojeni od root CLAUDE.md preko ugniježđenog učitavanja
+Istražena otvorena stavka iz "Plan implementacije skeniranja": treba li development build umjesto Expo Go za odabrane barkod/OCR biblioteke
+Potvrđeno: expo-camera barcode scanning (uklj. pdf417) radi u Expo Go bez ikakvih promjena — SDK 57 dokumentacija eksplicitno navodi expo-go kao podržanu platformu
+Potvrđeno: sve ML Kit OCR biblioteke (@react-native-ml-kit/text-recognition, expo-mlkit-ocr, expo-text-extractor) zahtijevaju development build (expo-dev-client + eas build --profile development ili lokalni prebuild) jer su native moduli izvan skupa koji Expo Go bundla, čak i one pisane kao Expo Modules s config pluginom
+Odabrana biblioteka za Put 2 (OCR): expo-text-extractor ili expo-mlkit-ocr (gotov Expo config plugin) umjesto golog @react-native-ml-kit/text-recognition (zahtijevao bi ručno pisanje config plugina)
+Odluka: ne prelazi se na development build odmah — Expo Go pokriva Put 1 (barkod) i sav ostali razvoj (auth, dashboard, navigation); prijelaz na dev build odgođen dok se ne krene na Put 2 implementaciju
+Ažuriran CLAUDE.md: trenutno stanje (mobile inicijaliziran), riješena stavka u "Plan implementacije skeniranja", checklist unutar koraka 6 u "Sljedeći koraci"
+
+Sutra
+
+Postaviti strukturu foldera (screens/, components/, api/, navigation/, types/), auth flow protiv postojećeg /api/auth backenda, backend URL konfiguracija za emulator/fizički uređaj
+
+Nastavak Dana 5 — struktura projekta, auth flow, SDK downgrade
+Što je napravljeno
+
+Odlučeno testiranje preko fizičkog uređaja (Expo Go) na LAN mreži umjesto Android emulatora — bliže stvarnom korištenju (kamera za skeniranje), LAN IP računala (192.168.1.8) korišten kao API_BASE_URL
+Kreirana struktura foldera: src/api, src/components, src/context, src/navigation, src/screens/auth, src/screens/app, src/types
+Instalirano: @react-navigation/native, @react-navigation/native-stack, react-native-screens, react-native-safe-area-context, expo-secure-store, axios
+Provjeren točan backend auth ugovor iz izvornog koda (AuthController, RegisterRequest/LoginRequest/RefreshRequest/AuthResponse/TokenResponse) prije pisanja mobile tipova — /api/auth/register|login|refresh|logout na portu 8080
+Implementiran axios klijent (src/api/client.ts) s request interceptorom (dodaje Bearer access token) i response interceptorom (na 401 automatski poziva /auth/refresh preko odvojene plain axios instance da ne triggera novi refresh krug, dijeli jedan in-flight refresh poziv kroz sve paralelne 401 zahtjeve, čisti tokene i javlja AuthContextu ako refresh sam padne)
+Tokeni i korisnički podaci (email/ime/prezime/rola) spremaju se u expo-secure-store (tokenStorage.ts) — korisnik ostaje prijavljen nakon restarta app-a
+Implementiran AuthContext (login/register/logout, bootstrap provjera pri pokretanju app-a), LoginScreen, RegisterScreen, placeholder HomeScreen, RootNavigator (auth stack vs app stack ovisno o user stanju)
+Pokrenut backend i Expo dev server radi testiranja na fizičkom uređaju — otkriveno da korisnikov Expo Go (iOS) ne podržava Expo SDK 57 ("Project is incompatible with this version of Expo Go"), a App Store ne nudi update Expo Go aplikacije za korisnikov iOS
+Spušten Expo SDK 57 → 54 (npx expo install expo@^54.0.0, zatim expo install --fix za usklađivanje react/react-native/svih ostalih paketa; čisti reinstall node_modules da se otkloni stale peer dependency warning) — sad odgovara Expo Go SDK 54 podršci na korisnikovom uređaju
+Ažuriran CLAUDE.md: trenutno stanje (SDK 54 umjesto 57, konkretne verzije), checklist unutar koraka 6
+
+Problemi i rješenja
+
+"Project is incompatible with this version of Expo Go" — korisnikov Expo Go ne podržava SDK 57 i ne može se ažurirati (ograničenje iOS verzije na uređaju); riješeno spuštanjem projekta na SDK 54
+
+Sutra
+
+Testirati auth flow (register/login/logout) na fizičkom uređaju preko Expo Go, SDK 54
+Krenuti na skeniranje (expo-camera PDF417) ili dashboard/payment-slip ekrane, ovisno o dogovoru
