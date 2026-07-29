@@ -23,6 +23,7 @@ public class PaymentSlipResponse {
     private String description;
     private LocalDate dueDate;
     private PaymentStatus status;
+    private LocalDate paidAt;
     private String imageUrl;
 
     private Long categoryId;

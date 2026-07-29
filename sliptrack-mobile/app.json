@@ -23,7 +23,20 @@
     },
     "plugins": [
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SlipTrack koristi kameru za skeniranje barkoda uplatnica."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SlipTrack treba pristup galeriji za odabir fotografije uplatnice.",
+          "cameraPermission": "SlipTrack koristi kameru za fotografiranje uplatnice."
+        }
+      ]
     ]
   }
 }

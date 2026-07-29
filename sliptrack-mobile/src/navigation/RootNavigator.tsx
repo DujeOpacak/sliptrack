@@ -8,6 +8,8 @@ import RegisterScreen from "../screens/auth/RegisterScreen";
 import AppTabNavigator from "./AppTabNavigator";
 import PropertyFormScreen from "../screens/app/PropertyFormScreen";
 import PaymentSlipFormScreen from "../screens/app/PaymentSlipFormScreen";
+import AddChoiceScreen from "../screens/app/AddChoiceScreen";
+import ScanScreen from "../screens/app/ScanScreen";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -29,6 +31,16 @@ function AppNavigator() {
         name="AppTabs"
         component={AppTabNavigator}
         options={{ headerShown: false }}
+      />
+      <AppStack.Screen
+        name="AddChoice"
+        component={AddChoiceScreen}
+        options={{ title: "Nova uplatnica", presentation: "modal" }}
+      />
+      <AppStack.Screen
+        name="ScanPaymentSlip"
+        component={ScanScreen}
+        options={{ title: "Skeniranje", presentation: "modal" }}
       />
       <AppStack.Screen
         name="PropertyForm"

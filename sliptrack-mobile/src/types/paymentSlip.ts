@@ -10,6 +10,7 @@ export interface PaymentSlip {
   description: string | null;
   dueDate: string | null;
   status: PaymentStatus;
+  paidAt: string | null;
   imageUrl: string | null;
   categoryId: number | null;
   categoryName: string | null;
@@ -32,4 +33,5 @@ export interface PaymentSlipRequest {
   categoryId: number;
   subCategoryId?: number;
   propertyId?: number;
+  wasScanned?: boolean;
 }

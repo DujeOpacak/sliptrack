@@ -9,9 +9,11 @@ import {
   ScrollView,
   Alert,
   Platform,
+  Image,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import * as ImagePicker from "expo-image-picker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../../navigation/types";
 import { paymentSlipApi } from "../../api/paymentSlipApi";
@@ -20,6 +22,13 @@ import { propertyApi } from "../../api/propertyApi";
 import type { Category, SubCategory } from "../../types/category";
 import type { Property } from "../../types/property";
 import type { PaymentStatus } from "../../types/paymentSlip";
+import { colors } from "../../theme/colors";
+
+interface PickedImage {
+  uri: string;
+  mimeType?: string;
+  fileName?: string;
+}
 
 type Props = NativeStackScreenProps<AppStackParamList, "PaymentSlipForm">;
 
@@ -31,8 +40,16 @@ function formatDateLocal(date: Date) {
 }
 
 export default function PaymentSlipFormScreen({ navigation, route }: Props) {
-  const paymentSlipId = route.params?.paymentSlipId;
+  const paymentSlipId =
+    route.params && "paymentSlipId" in route.params
+      ? route.params.paymentSlipId
+      : undefined;
+  const scannedData =
+    route.params && "scannedData" in route.params
+      ? route.params.scannedData
+      : undefined;
   const isEditing = paymentSlipId !== undefined;
+  const wasScanned = scannedData !== undefined;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -47,7 +64,12 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [status, setStatus] = useState<PaymentStatus>("UNPAID");
+  const [paidAt, setPaidAt] = useState<Date | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
+  const [showPaidAtPicker, setShowPaidAtPicker] = useState(false);
+  const [draftPaidAt, setDraftPaidAt] = useState(new Date());
+  const [pickedImage, setPickedImage] = useState<PickedImage | null>(null);
+  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
@@ -86,6 +108,15 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         setSubCategoryId(slip.subCategoryId ?? undefined);
         setPropertyId(slip.propertyId ?? undefined);
         setStatus(slip.status);
+        setPaidAt(slip.paidAt ? new Date(slip.paidAt) : null);
+        setExistingImageUrl(slip.imageUrl);
+      } else if (scannedData) {
+        setIban(scannedData.iban);
+        setAmount(String(scannedData.amount));
+        setReferenceNumber(scannedData.referenceNumber ?? "");
+        setPaymentModel(scannedData.paymentModel ?? "");
+        setProviderName(scannedData.providerName ?? "");
+        setDescription(scannedData.description ?? "");
       }
       setIsLoading(false);
     })();
@@ -104,6 +135,44 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     const newSubCategory = subCategories.find((sc) => sc.id === newSubCategoryId);
     if (!newSubCategory?.allowsProperty) {
       setPropertyId(undefined);
+    }
+  };
+
+  const handlePickImage = () => {
+    Alert.alert("Fotografija uplatnice", undefined, [
+      { text: "Odustani", style: "cancel" },
+      { text: "Kamera", onPress: () => launchPicker("camera") },
+      { text: "Galerija", onPress: () => launchPicker("library") },
+    ]);
+  };
+
+  const launchPicker = async (source: "camera" | "library") => {
+    const permissionResult =
+      source === "camera"
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permissionResult.granted) {
+      Alert.alert(
+        "Pristup odbijen",
+        source === "camera"
+          ? "Potreban je pristup kameri za fotografiranje uplatnice."
+          : "Potreban je pristup galeriji za odabir fotografije.",
+      );
+      return;
+    }
+
+    const result =
+      source === "camera"
+        ? await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.7 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      setPickedImage({
+        uri: asset.uri,
+        mimeType: asset.mimeType,
+        fileName: asset.fileName ?? undefined,
+      });
     }
   };
 
@@ -141,11 +210,21 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         categoryId,
         subCategoryId,
         propertyId,
+        wasScanned: !isEditing && wasScanned,
       };
-      if (isEditing) {
-        await paymentSlipApi.update(paymentSlipId, request);
-      } else {
-        await paymentSlipApi.create(request);
+      const savedId = isEditing
+        ? (await paymentSlipApi.update(paymentSlipId, request)).id
+        : (await paymentSlipApi.create(request)).id;
+
+      if (pickedImage) {
+        try {
+          await paymentSlipApi.uploadImage(savedId, pickedImage);
+        } catch {
+          Alert.alert(
+            "Slika nije spremljena",
+            "Uplatnica je spremljena, ali fotografija nije uspjela poslati. Pokušaj ponovno kroz uređivanje.",
+          );
+        }
       }
       navigation.goBack();
     } catch (err: any) {
@@ -155,13 +234,16 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleToggleStatus = async () => {
-    if (!isEditing) return;
-    const newStatus: PaymentStatus = status === "PAID" ? "UNPAID" : "PAID";
+  const applyStatusChange = async (newStatus: PaymentStatus, newPaidAt?: Date) => {
     setIsTogglingStatus(true);
     try {
-      const updated = await paymentSlipApi.updateStatus(paymentSlipId!, newStatus);
+      const updated = await paymentSlipApi.updateStatus(
+        paymentSlipId!,
+        newStatus,
+        newPaidAt ? formatDateLocal(newPaidAt) : undefined,
+      );
       setStatus(updated.status);
+      setPaidAt(updated.paidAt ? new Date(updated.paidAt) : null);
     } catch (err: any) {
       Alert.alert(
         "Promjena statusa nije uspjela",
@@ -170,6 +252,38 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     } finally {
       setIsTogglingStatus(false);
     }
+  };
+
+  const handleToggleStatus = () => {
+    if (!isEditing) return;
+    if (status === "PAID") {
+      void applyStatusChange("UNPAID");
+      return;
+    }
+    setDraftPaidAt(new Date());
+    setShowPaidAtPicker(true);
+  };
+
+  const handleEditPaidAt = () => {
+    if (!isEditing || status !== "PAID") return;
+    setDraftPaidAt(paidAt ?? new Date());
+    setShowPaidAtPicker(true);
+  };
+
+  const handlePaidAtChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === "android") {
+      setShowPaidAtPicker(false);
+      if (event.type !== "dismissed" && selectedDate) {
+        void applyStatusChange("PAID", selectedDate);
+      }
+    } else if (selectedDate) {
+      setDraftPaidAt(selectedDate);
+    }
+  };
+
+  const handleConfirmPaidAt = () => {
+    setShowPaidAtPicker(false);
+    void applyStatusChange("PAID", draftPaidAt);
   };
 
   const handleDelete = () => {
@@ -205,6 +319,13 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+      {wasScanned && !isEditing && (
+        <View style={styles.scanBanner}>
+          <Text style={styles.scanBannerText}>
+            Podaci popunjeni skeniranjem — provjeri prije spremanja.
+          </Text>
+        </View>
+      )}
       {isEditing && (
         <Pressable
           style={[
@@ -225,49 +346,91 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
           )}
         </Pressable>
       )}
+      {isEditing && status === "PAID" && (
+        <Pressable style={styles.paidAtRow} onPress={handleEditPaidAt}>
+          <Text style={styles.paidAtText}>
+            Plaćeno: {paidAt ? formatDateLocal(paidAt) : "—"}
+          </Text>
+          <Text style={styles.paidAtEdit}>Promijeni</Text>
+        </Pressable>
+      )}
+      {showPaidAtPicker && (
+        <View style={styles.paidAtPickerWrapper}>
+          <DateTimePicker
+            value={draftPaidAt}
+            mode="date"
+            maximumDate={new Date()}
+            onChange={handlePaidAtChange}
+          />
+          {Platform.OS === "ios" && (
+            <Pressable style={styles.button} onPress={handleConfirmPaidAt}>
+              <Text style={styles.buttonText}>Potvrdi datum plaćanja</Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+      <Text style={styles.label}>Fotografija uplatnice</Text>
+      <Pressable style={styles.imagePicker} onPress={handlePickImage}>
+        {pickedImage || existingImageUrl ? (
+          <Image
+            source={{ uri: pickedImage?.uri ?? existingImageUrl! }}
+            style={styles.imagePreview}
+          />
+        ) : (
+          <Text style={styles.imagePickerText}>+ Dodaj fotografiju</Text>
+        )}
+      </Pressable>
+
+      <Text style={styles.label}>IBAN primatelja</Text>
       <TextInput
         style={styles.input}
-        placeholder="IBAN primatelja"
+        placeholder="HR12 1234 5678 9012 3456 7"
         autoCapitalize="characters"
         value={iban}
         onChangeText={setIban}
       />
+      <Text style={styles.label}>Iznos (EUR)</Text>
       <TextInput
         style={styles.input}
-        placeholder="Iznos (EUR)"
+        placeholder="0.00"
         keyboardType="decimal-pad"
         value={amount}
         onChangeText={setAmount}
       />
+      <Text style={styles.label}>Naziv davatelja usluge</Text>
       <TextInput
         style={styles.input}
-        placeholder="Naziv davatelja usluge"
+        placeholder="npr. HEP Elektra"
         value={providerName}
         onChangeText={setProviderName}
       />
+      <Text style={styles.label}>Poziv na broj</Text>
       <TextInput
         style={styles.input}
-        placeholder="Poziv na broj"
+        placeholder="npr. 1234567890"
         value={referenceNumber}
         onChangeText={setReferenceNumber}
       />
+      <Text style={styles.label}>Model plaćanja</Text>
       <TextInput
         style={styles.input}
-        placeholder="Model plaćanja (npr. HR01)"
+        placeholder="npr. HR01"
         autoCapitalize="characters"
         value={paymentModel}
         onChangeText={setPaymentModel}
       />
+      <Text style={styles.label}>Opis</Text>
       <TextInput
         style={styles.input}
-        placeholder="Opis"
+        placeholder="npr. Struja - srpanj 2026"
         value={description}
         onChangeText={setDescription}
       />
 
+      <Text style={styles.label}>Datum dospijeća</Text>
       <Pressable style={styles.input} onPress={() => setShowDatePicker(true)}>
         <Text style={dueDate ? styles.dateText : styles.datePlaceholder}>
-          {dueDate ? formatDateLocal(dueDate) : "Datum dospijeća"}
+          {dueDate ? formatDateLocal(dueDate) : "Odaberi datum"}
         </Text>
       </Pressable>
       {showDatePicker && (
@@ -372,6 +535,36 @@ const styles = StyleSheet.create({
   statusButtonPaid: { backgroundColor: "#16a34a" },
   statusButtonUnpaid: { backgroundColor: "#dc2626" },
   statusButtonText: { color: "#fff", fontSize: 15, fontWeight: "600" },
+  paidAtRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  paidAtText: { fontSize: 14, color: colors.textSecondary },
+  paidAtEdit: { fontSize: 14, color: colors.primary, fontWeight: "600" },
+  paidAtPickerWrapper: { marginBottom: 16 },
+  scanBanner: {
+    backgroundColor: "#eff6ff",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  scanBannerText: { color: "#1d4ed8", fontSize: 13, textAlign: "center" },
+  imagePicker: {
+    borderWidth: 1,
+    borderColor: colors.gridline,
+    borderRadius: 8,
+    marginBottom: 16,
+    height: 160,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+  },
+  imagePickerText: { color: colors.primary, fontSize: 15, fontWeight: "600" },
+  imagePreview: { width: "100%", height: "100%" },
   dateText: { fontSize: 16, color: "#000" },
   datePlaceholder: { fontSize: 16, color: "#999" },
   label: { fontSize: 14, color: "#666", marginBottom: 4, marginTop: 4 },

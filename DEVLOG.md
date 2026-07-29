@@ -293,3 +293,39 @@ Nije bilo pravih bugova u ovoj sesiji — samo arhitekturna odluka (tab bar umje
 Sutra
 
 PDF417 skeniranje (Put 1) — expo-camera, parsiranje HUB-3 stringa, popunjavanje postojeće PaymentSlipForm preko modalnog navigacijskog puta
+
+29.07.2026. — Dan 6, nastavak 2 — PDF417 skeniranje, upload fotografije, datum plaćanja
+
+Što je napravljeno
+
+Prije implementacije PDF417 skeniranja dogovoreno (na korisnikovo pitanje) da centralni + u tab baru prvo otvara mali izbor Skeniraj/Ručni unos umjesto da direktno otvara praznu formu — skeniranje postaje primarni, brži put za većinu uplatnica
+Instaliran expo-camera, potvrđen Expo Go SDK 54 kompatibilan na docs.expo.dev prije instalacije (barcode scanning eksplicitno naveden kao podržan u Expo Go)
+Implementiran parseHub3.ts — čista funkcija koja parsira HUB-3 barkod string po fiksnom redoslijedu polja iz CLAUDE.md ("Plan implementacije skeniranja"), s validacijom (HRVHUB30 prefiks, dovoljno linija, IBAN i iznos moraju postojati) da se ne proslijedi napola parsirani rezultat dalje
+Implementiran ScanScreen.tsx — CameraView s barcodeScannerSettings pdf417, obrada tri stanja permisije (nije tražena/odbijena/odobrena), isLocked flag da se isti barkod ne obradi više puta zaredom dok kamera i dalje gleda u njega, Alert s opcijama "Ručni unos"/"Pokušaj ponovno" kad parseHub3Barcode vrati null
+Implementiran AddChoiceScreen.tsx — dva velika gumba (Skeniraj barkod / Ručni unos), koristi navigation.replace kroz cijeli lanac (AddChoice→Scan/Form) da povratak iz forme ide ravno na tabove umjesto kroz sve međukorake
+Navigacijski tipovi prošireni: AppStackParamList dobio AddChoice i ScanPaymentSlip, PaymentSlipForm param sad prihvaća i { scannedData } uz postojeći { paymentSlipId } | undefined; oba nova ekrana registrirana u RootNavigator kao presentation: "modal"
+AppTabNavigator centralni + listener promijenjen da vodi na AddChoice umjesto direktno na PaymentSlipForm
+PaymentSlipFormScreen proširen da čita scannedData iz route param (type narrowing preko "paymentSlipId"/"scannedData" in route.params) i pre-popunjava polja; dodan plavi banner "Podaci popunjeni skeniranjem — provjeri prije spremanja" kad je forma otvorena iz scan-flowa
+Riješeno otvoreno pitanje iz CLAUDE.md oko PaymentSlip.scannedAt: dodano PaymentSlipRequest.wasScanned (boolean) na backend, PaymentSlipService.create() postavlja scannedAt = LocalDateTime.now() samo ako je true, update() ga ne dira (ne resetira postojeći scannedAt pri uređivanju); mobile šalje wasScanned: true samo pri kreiranju iz scan-flowa
+Korisnik testirao skeniranje na fizičkom uređaju sa stvarnom uplatnicom — radi ispravno
+Razjašnjeno (na korisnikovo pitanje) da skeniranje barkoda i fotografiranje uplatnice nisu povezani — CameraView u ScanScreen samo dekodira barkod, ne snima sliku; dogovoreno da fotografija bude zaseban korak na PaymentSlipForm (radi identično za scan/ručni unos/edit), ne automatsko snimanje odmah pri skeniranju, jer bi automatska slika često bila kadrirana na sam barkod umjesto cijele uplatnice
+Instaliran expo-image-picker, potvrđen Expo Go kompatibilan; provjeren i korišten non-deprecated API (mediaTypes: ['images'] umjesto zastarjelog MediaTypeOptions.Images)
+Implementiran paymentSlipApi.uploadImage(id, image) — gradi FormData s uri/name/type; dodana kartica za fotografiju na vrhu PaymentSlipForm (dodir otvara Alert izbor Kamera/Galerija), prikazuje preview lokalno odabrane ili postojeće (imageUrl) slike
+Redoslijed spremanja u handleSave promijenjen: prvo create()/update() (endpoint za sliku zahtijeva postojeći id), tek onda uploadImage(savedId, pickedImage) ako je slika odabrana; ako sam upload slike padne, uplatnica ostaje spremljena (Alert obavještava korisnika, ne gubi unesene podatke) — greška u uploadu slike ne smije poništiti već uspješno spremljenu uplatnicu
+Na korisnikov zahtjev, iznad svakog polja u PaymentSlipForm dodan vidljiv label (umjesto oslanjanja samo na placeholder unutar polja) — placeholderi promijenjeni u kratke primjere formata (npr. "HR12 1234...") umjesto duplikata naziva polja
+Na korisnikovo pitanje razjašnjena razlika između PaymentSlipAudit.changedAt (kad je promjena statusa upisana u app, automatski "sada") i predloženog novog paidAt polja (stvarni datum plaćanja, koji korisnik može zadati unatrag — npr. skenirao danas, platio prije 5 dana)
+Implementirano novo polje PaymentSlip.paidAt (LocalDate, nullable): PaymentSlipStatusUpdateRequest.paidAt opcionalan; PaymentSlipService.updateStatus() — prijelaz u PAID postavlja poslani datum ili "danas" ako nije poslan i ranije nije bio PAID, ponovno slanje PAID uz drugi paidAt dok je već PAID samo korigira datum (ne prepisuje se na "danas" ako paidAt nije poslan), prijelaz u UNPAID briše paidAt; PaymentSlipResponse.paidAt dodan
+Mobile: dodir na status gumb u PaymentSlipFormScreen (UNPAID→PAID) sad otvara DateTimePicker (maximumDate = danas — ne može se platiti u budućnosti) prije slanja API poziva, umjesto trenutnog togglea; kad je status PAID, prikazan redak "Plaćeno: DD-MM-YYYY [Promijeni]" za naknadnu korekciju datuma; brzi toggle na PaymentSlipListScreen ostaje trenutan bez pitanja za datum (backend defaultira na danas)
+Android/iOS razlika u DateTimePicker ponašanju obrađena posebno za paidAt jer se (za razliku od dueDate polja) tu poziva API: Android native modal dialog šalje onChange samo jednom pri potvrdi pa je sigurno odmah pozvati API u callbacku; iOS inline picker šalje onChange kontinuirano dok korisnik vrti kotačić, pa bi pozivanje API-ja ondje značilo desetke nepotrebnih mrežnih poziva — riješeno lokalnim draft stateom na iOS-u uz eksplicitan gumb "Potvrdi datum plaćanja"
+Ažuriran CLAUDE.md: trenutno stanje, domenski model (paidAt na PaymentSlip), checklist u koraku 6
+Korisnik pitao za procjenu postotka dovršenosti aplikacije — dana gruba procjena po komponenti (backend ~90%, mobile ~65%, admin 0%) bez pretenzije na preciznu metriku, izričito isključujući pisanje samog rada
+
+Problemi i rješenja
+
+Nije bilo pravih bugova — cijela sesija su nove funkcionalnosti (PDF417 scan, image upload, paidAt) plus dvije manje dizajnerske odluke potvrđene s korisnikom prije implementacije (AddChoice izbor umjesto direktnog + na formu, slikanje kao zaseban korak umjesto automatskog snimanja pri skeniranju)
+
+Sutra
+
+UserDevice registracija na mobileu (POST /api/devices pri loginu/bootstrapu) — preduvjet za sve push-notifikacijske funkcionalnosti
+Notification inbox ekran
+Ili OCR (Put 2) / sliptrack-admin, ovisno o dogovoru

@@ -17,6 +17,7 @@ import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -85,6 +86,7 @@ public class PaymentSlipService {
                 .subCategory(subCategory)
                 .property(property)
                 .user(currentUser)
+                .scannedAt(request.isWasScanned() ? LocalDateTime.now() : null)
                 .build();
 
         PaymentSlip saved = paymentSlipRepository.save(paymentSlip);
@@ -124,6 +126,18 @@ public class PaymentSlipService {
         PaymentStatus newStatus = request.getStatus();
 
         paymentSlip.setStatus(newStatus);
+
+        if (newStatus == PaymentStatus.PAID) {
+            if (request.getPaidAt() != null) {
+                paymentSlip.setPaidAt(request.getPaidAt());
+            } else if (oldStatus != PaymentStatus.PAID) {
+                paymentSlip.setPaidAt(LocalDate.now());
+            }
+            // ako je već bio PAID i paidAt nije poslan, zadržava se postojeći datum (ne prepisuje se na "danas")
+        } else {
+            paymentSlip.setPaidAt(null);
+        }
+
         PaymentSlip saved = paymentSlipRepository.save(paymentSlip);
 
         if (oldStatus != newStatus) {
@@ -239,6 +253,7 @@ public class PaymentSlipService {
                 .description(paymentSlip.getDescription())
                 .dueDate(paymentSlip.getDueDate())
                 .status(paymentSlip.getStatus())
+                .paidAt(paymentSlip.getPaidAt())
                 .imageUrl(paymentSlipImageService.getPresignedUrl(paymentSlip.getImageKey()))
                 .categoryId(category == null ? null : category.getId())
                 .categoryName(category == null ? null : category.getName())

@@ -36,4 +36,6 @@ public class PaymentSlipRequest {
     private Long subCategoryId;
 
     private Long propertyId;
+
+    private boolean wasScanned;
 }

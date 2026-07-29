@@ -64,8 +64,7 @@ export default function AppTabNavigator() {
           tabPress: (event) => {
             event.preventDefault();
             navigation.getParent<NativeStackScreenProps<AppStackParamList>["navigation"]>()?.navigate(
-              "PaymentSlipForm",
-              undefined,
+              "AddChoice",
             );
           },
         })}

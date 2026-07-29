@@ -31,10 +31,29 @@ export const paymentSlipApi = {
   async delete(id: number) {
     await apiClient.delete(`/payment-slips/${id}`);
   },
-  async updateStatus(id: number, status: PaymentStatus) {
+  async updateStatus(id: number, status: PaymentStatus, paidAt?: string) {
     const response = await apiClient.patch<PaymentSlip>(
       `/payment-slips/${id}/status`,
-      { status },
+      { status, paidAt },
+    );
+    return response.data;
+  },
+  async uploadImage(
+    id: number,
+    image: { uri: string; mimeType?: string; fileName?: string },
+  ) {
+    const fileName = image.fileName ?? image.uri.split("/").pop() ?? "photo.jpg";
+    const formData = new FormData();
+    formData.append("file", {
+      uri: image.uri,
+      name: fileName,
+      type: image.mimeType ?? "image/jpeg",
+    } as any);
+
+    const response = await apiClient.post<PaymentSlip>(
+      `/payment-slips/${id}/image`,
+      formData,
+      { headers: { "Content-Type": "multipart/form-data" } },
     );
     return response.data;
   },

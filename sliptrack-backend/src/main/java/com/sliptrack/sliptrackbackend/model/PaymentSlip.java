@@ -45,6 +45,8 @@ public class PaymentSlip {
 
     private String imageKey;
 
+    private LocalDate paidAt;
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
