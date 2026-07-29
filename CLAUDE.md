@@ -67,6 +67,8 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ PaymentSlip ručni unos (Put 3 iz plana skeniranja) implementiran: `paymentSlipApi.ts`, `PaymentSlipListScreen` (kartice sa statusom/iznosom/kategorijom, brzi toggle statusa dodirom na badge), `PaymentSlipFormScreen` (create/edit/delete; kategorija/potkategorija dropdown preko `@react-native-picker/picker` s dinamičkim učitavanjem potkategorija; nekretnina dropdown prikazan samo kad odabrana potkategorija ima `allowsProperty`, isto pravilo kao backend `PaymentSlipService.resolveProperty`; datum dospijeća preko `@react-native-community/datetimepicker`, formatiran ručno iz lokalnih Date dijelova — ne `toISOString()`, da se izbjegne UTC timezone off-by-one bug kod ponoćnih lokalnih datuma)
 - ✅ Status promjena (PAID/UNPAID) ožičena na `PATCH /payment-slips/{id}/status` — dostupna kao brzi dodir na badge u listi i kao poseban gumb u formi, oba mjesta ažuriraju lokalni state iz odgovora servera bez punog refetcha
 - ✅ Oba nova native paketa (`@react-native-picker/picker`, `@react-native-community/datetimepicker`) potvrđena kao Expo Go kompatibilna na SDK 54 prije instalacije (provjereno na docs.expo.dev, po pravilu iz `sliptrack-mobile/AGENTS.md` da se prije pisanja koda čita točna verzionirana Expo dokumentacija)
+- ✅ Navigacija na mobileu preoblikovana u bottom tab bar (`@react-navigation/bottom-tabs`): Dashboard / Uplatnice / (+) / Nekretnine / Profil — `AppTabNavigator.tsx` (novi paket `@expo/vector-icons` za ikone taba); root `RootNavigator` sad omata tabove kao `AppTabs` ekran plus `PropertyForm`/`PaymentSlipForm` kao `presentation: "modal"` ekrani izvan tab bara; centralni `+` (`CenterAddButton`, komponenta podignuta iznad tab bara) nije pravi tab nego presreće `tabPress` i direktno otvara `PaymentSlipForm` preko `navigation.getParent()`; stari `HomeScreen` obrisan, zamijenjen `ProfileScreen`-om (greeting + odjava) kao Profil tab; FAB na `PaymentSlipListScreen` uklonjen (zamijenjen globalnim tab bar `+`)
+- ✅ `DashboardScreen` implementiran: `dashboardApi.ts` (summary/by-category/by-provider/timeline), `StatTile`/`BarChart`/`LineChart` komponente u `src/components/`, `src/theme/colors.ts` uveden kao dijeljena paleta (validirana kroz `dataviz` skill — jedna plava boja za sve barove jer su kategorije nominalne bez prirodnog poretka, tzv. "rainbow bar chart" anti-pattern namjerno izbjegnut; validirane `good`/`critical` status boje umjesto proizvoljnog zelene/crvene); `BarChart` građen s običnim RN View-ovima (bez SVG-a), `LineChart` s `react-native-svg` (Expo Go kompatibilan, potvrđeno prije instalacije)
 - ❌ `sliptrack-admin` nije inicijaliziran
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -309,7 +311,8 @@ Napomene:
    - ✅ Struktura foldera, auth flow protiv `/api/auth`, navigation — testirano na fizičkom uređaju
    - ✅ Property CRUD ekrani (lista, forma create/edit/delete)
    - ✅ PaymentSlip ručni unos (Put 3) — lista, forma create/edit/delete, kategorija/potkategorija/nekretnina dropdown, date picker, status toggle
-   - ❌ PDF417 skeniranje (Put 1), upload slike, dashboard ekrani, OCR (Put 2)
+   - ✅ Bottom tab navigacija (Dashboard/Uplatnice/+/Nekretnine/Profil) + Dashboard ekran (stat tiles, bar/line grafovi)
+   - ❌ PDF417 skeniranje (Put 1), upload slike, OCR (Put 2)
 7. Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API) — nakon mobitela, kad postoji barem jedan registriran `UserDevice` za stvarno testiranje push notifikacija
 8. React admin sučelje
 9. Testiranje

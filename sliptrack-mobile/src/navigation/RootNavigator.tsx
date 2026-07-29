@@ -5,10 +5,8 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
 import LoginScreen from "../screens/auth/LoginScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
-import HomeScreen from "../screens/app/HomeScreen";
-import PropertyListScreen from "../screens/app/PropertyListScreen";
+import AppTabNavigator from "./AppTabNavigator";
 import PropertyFormScreen from "../screens/app/PropertyFormScreen";
-import PaymentSlipListScreen from "../screens/app/PaymentSlipListScreen";
 import PaymentSlipFormScreen from "../screens/app/PaymentSlipFormScreen";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
@@ -27,26 +25,20 @@ function AuthNavigator() {
 function AppNavigator() {
   return (
     <AppStack.Navigator>
-      <AppStack.Screen name="Home" component={HomeScreen} />
       <AppStack.Screen
-        name="PropertyList"
-        component={PropertyListScreen}
-        options={{ title: "Nekretnine" }}
+        name="AppTabs"
+        component={AppTabNavigator}
+        options={{ headerShown: false }}
       />
       <AppStack.Screen
         name="PropertyForm"
         component={PropertyFormScreen}
-        options={{ title: "Nekretnina" }}
-      />
-      <AppStack.Screen
-        name="PaymentSlipList"
-        component={PaymentSlipListScreen}
-        options={{ title: "Uplatnice" }}
+        options={{ title: "Nekretnina", presentation: "modal" }}
       />
       <AppStack.Screen
         name="PaymentSlipForm"
         component={PaymentSlipFormScreen}
-        options={{ title: "Uplatnica" }}
+        options={{ title: "Uplatnica", presentation: "modal" }}
       />
     </AppStack.Navigator>
   );

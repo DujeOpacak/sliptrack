@@ -3,10 +3,16 @@ export type AuthStackParamList = {
   Register: undefined;
 };
 
-export type AppStackParamList = {
-  Home: undefined;
-  PropertyList: undefined;
-  PropertyForm: { propertyId: number } | undefined;
+export type AppTabParamList = {
+  Dashboard: undefined;
   PaymentSlipList: undefined;
+  AddPaymentSlip: undefined;
+  PropertyList: undefined;
+  Profile: undefined;
+};
+
+export type AppStackParamList = {
+  AppTabs: undefined;
+  PropertyForm: { propertyId: number } | undefined;
   PaymentSlipForm: { paymentSlipId: number } | undefined;
 };

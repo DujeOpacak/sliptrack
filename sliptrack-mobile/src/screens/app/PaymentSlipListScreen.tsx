@@ -8,12 +8,12 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { AppStackParamList } from "../../navigation/types";
+import type { AppTabScreenProps } from "../../navigation/AppTabNavigator";
 import { paymentSlipApi } from "../../api/paymentSlipApi";
 import type { PaymentSlip } from "../../types/paymentSlip";
+import { colors } from "../../theme/colors";
 
-type Props = NativeStackScreenProps<AppStackParamList, "PaymentSlipList">;
+type Props = AppTabScreenProps<"PaymentSlipList">;
 
 export default function PaymentSlipListScreen({ navigation }: Props) {
   const [paymentSlips, setPaymentSlips] = useState<PaymentSlip[]>([]);
@@ -102,12 +102,6 @@ export default function PaymentSlipListScreen({ navigation }: Props) {
           </Pressable>
         )}
       />
-      <Pressable
-        style={styles.fab}
-        onPress={() => navigation.navigate("PaymentSlipForm", undefined)}
-      >
-        <Text style={styles.fabText}>+</Text>
-      </Pressable>
     </View>
   );
 }
@@ -115,7 +109,7 @@ export default function PaymentSlipListScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
-  emptyText: { color: "#666", fontSize: 16 },
+  emptyText: { color: colors.textSecondary, fontSize: 16 },
   card: {
     backgroundColor: "#f5f5f5",
     borderRadius: 8,
@@ -129,24 +123,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   cardTitle: { fontSize: 16, fontWeight: "600", flexShrink: 1 },
-  cardSubtitle: { fontSize: 14, color: "#666", marginTop: 4 },
+  cardSubtitle: { fontSize: 14, color: colors.textSecondary, marginTop: 4 },
   cardAmount: { fontSize: 18, fontWeight: "700", marginTop: 8 },
-  cardDueDate: { fontSize: 13, color: "#666", marginTop: 4 },
+  cardDueDate: { fontSize: 13, color: colors.textSecondary, marginTop: 4 },
   badge: { borderRadius: 12, paddingVertical: 4, paddingHorizontal: 10 },
   badgePaid: { backgroundColor: "#dcfce7" },
   badgeUnpaid: { backgroundColor: "#fee2e2" },
   badgeText: { fontSize: 12, fontWeight: "600" },
-  fab: {
-    position: "absolute",
-    right: 24,
-    bottom: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: "#2563eb",
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 4,
-  },
-  fabText: { color: "#fff", fontSize: 28, lineHeight: 30 },
 });

@@ -8,12 +8,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { AppStackParamList } from "../../navigation/types";
+import type { AppTabScreenProps } from "../../navigation/AppTabNavigator";
 import { propertyApi } from "../../api/propertyApi";
 import type { Property } from "../../types/property";
 
-type Props = NativeStackScreenProps<AppStackParamList, "PropertyList">;
+type Props = AppTabScreenProps<"PropertyList">;
 
 export default function PropertyListScreen({ navigation }: Props) {
   const [properties, setProperties] = useState<Property[]>([]);

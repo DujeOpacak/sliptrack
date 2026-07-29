@@ -266,3 +266,30 @@ Sutra
 
 PDF417 skeniranje (Put 1) — expo-camera, parsiranje HUB-3 stringa, popunjavanje postojeće PaymentSlipForm
 Ili upload slike uplatnice (POST /{id}/image) i dashboard ekrani, ovisno o dogovoru
+
+29.07.2026. — Dan 6, nastavak — Dashboard, bottom tab navigacija
+
+Što je napravljeno
+
+Dogovoreno da Dashboard postane Home ekran (umjesto praznog "Bok, ime!" ekrana) i da se doda bottom tab bar s centralnim + gumbom za brzo dodavanje uplatnice (Instagram-style obrazac)
+Prije pisanja koda za grafove pozvan dataviz skill — pravilo iz procedure primijenjeno na React Native kontekst: forma prije boje (stat tile za headline brojku umjesto grafa, bar chart za magnitude usporedbu, line chart za promjenu kroz vrijeme), zatim provjerena validirana referentna paleta (samo light mode vrijednosti korištene jer app.json fiksira userInterfaceStyle: light)
+Uveden src/theme/colors.ts s validiranim vrijednostima iz palette.md (primary plava, good/critical status boje) — dijeli ga StatTile, BarChart, LineChart i status badge/toggle diljem app-a
+Implementirane komponente: StatTile.tsx (label/value/subtitle/accent bar), BarChart.tsx (obični RN View-ovi, ne SVG — horizontalni bar s 4px zaobljenim krajem, kvadratna baza), LineChart.tsx (react-native-svg — 2px linija, round join/cap, 4px dot markeri s 2px surface ringom, end-label s vrijednosti)
+Namjerno izbjegnut "rainbow bar chart" anti-pattern (iz dataviz skilla): kategorije u by-category/by-provider grafovima su nominalne bez prirodnog poretka, pa svi barovi nose istu plavu boju — identitet nosi label na osi, ne boja; različita boja po baru bi dvostruko kodirala duljinu bara kao nijansu bez dodatne informacije
+DashboardScreen implementiran: dashboardApi.ts (getSummary/getByCategory/getByProvider/getTimeline), fetch na useFocusEffect (osvježava se pri svakom otvaranju taba), summary kao dva StatTile-a (Plaćeno/Neplaćeno sa good/critical accent bojom i brojem uplatnica), by-category i by-provider (top 6) kao BarChart, timeline kao LineChart
+Instalirani @react-navigation/bottom-tabs, react-native-svg, @expo/vector-icons — sva tri potvrđena kao standardni Expo/Expo Go bundani paketi
+Navigacija preoblikovana s jednog stacka u bottom tab bar: novi AppTabNavigator.tsx s tabovima Dashboard / Uplatnice / (+) / Nekretnine / Profil, ikone preko @expo/vector-icons Ionicons
+Centralni + implementiran kao CenterAddButton.tsx (podignuta kružna plava komponenta, position: top: -18 iznad tab bara) postavljen kao tabBarButton na "praznom" tab slotu; taj slot ima listeners={{ tabPress: e => { e.preventDefault(); navigation.getParent()?.navigate('PaymentSlipForm') } }} — presreće default tab navigaciju i umjesto prikaza praznog ekrana direktno otvara formu za novu uplatnicu
+RootNavigator restrukturiran: root stack sad sadrži AppTabs ekran (cijeli bottom tab navigator, headerShown: false da se izbjegne dupli header) plus PropertyForm i PaymentSlipForm kao zasebni stack ekrani s presentation: "modal" — otvaraju se preko cijelog tab bara, ne unutar njega
+Composite navigacijski tip AppTabScreenProps<T> uveden u AppTabNavigator.tsx (CompositeScreenProps<BottomTabScreenProps<AppTabParamList, T>, NativeStackScreenProps<AppStackParamList>>) — potreban jer ekrani unutar tabova (PaymentSlipListScreen, PropertyListScreen) moraju navigirati i unutar svog taba i van njega u root stack (na modalne forme)
+Stari HomeScreen.tsx obrisan (zamijenjen ProfileScreen.tsx — isti greeting/odjava sadržaj, bez navigacijskih linkova jer to sad rade tabovi); FAB na PaymentSlipListScreen uklonjen (zamijenjen globalnim tab bar + gumbom, da ne postoje dva različita ulaza za istu akciju); FAB na PropertyListScreen ostao (dodavanje nekretnine nije pokriveno globalnim +, koji je namjerno samo za uplatnice)
+Korisnik testirao na fizičkom uređaju — zadovoljan izgledom, poboljšanja odgođena za kasnije
+Ažuriran CLAUDE.md: trenutno stanje, checklist unutar koraka 6
+
+Problemi i rješenja
+
+Nije bilo pravih bugova u ovoj sesiji — samo arhitekturna odluka (tab bar umjesto jednog stacka) i primjena dataviz metodologije na RN kontekst bez web/HTML specifičnih dijelova (hover tooltip, dark mode toggle preskočeni jer app nema dark mode niti hover na mobileu)
+
+Sutra
+
+PDF417 skeniranje (Put 1) — expo-camera, parsiranje HUB-3 stringa, popunjavanje postojeće PaymentSlipForm preko modalnog navigacijskog puta
