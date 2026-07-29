@@ -5,4 +5,8 @@ export type AuthStackParamList = {
 
 export type AppStackParamList = {
   Home: undefined;
+  PropertyList: undefined;
+  PropertyForm: { propertyId: number } | undefined;
+  PaymentSlipList: undefined;
+  PaymentSlipForm: { paymentSlipId: number } | undefined;
 };

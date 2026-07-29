@@ -21,7 +21,7 @@ Tri zasebna projekta u jednom repozitoriju (privatni GitHub repo `sliptrack`):
 ```
 sliptrack/
   ├── sliptrack-backend/     ← Java 21 / Spring Boot 4.1.0 REST API
-  ├── sliptrack-mobile/      ← React Native (Expo) — prazan, još nije započet
+  ├── sliptrack-mobile/      ← React Native (Expo) — u izradi (auth, Property, PaymentSlip ručni unos gotovi)
   ├── sliptrack-admin/       ← React web admin sučelje — još ne postoji
   └── docker/                ← docker-compose.yml (PostgreSQL 18 + MinIO)
 ```
@@ -37,7 +37,7 @@ sliptrack/
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-07-27)
+## Trenutno stanje (2026-07-29)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
@@ -61,6 +61,12 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ❌ Svi REST endpointi iz plana sad implementirani. Preostaje: `@Scheduled` job za automatske podsjetnike (analiza `RecurringPattern`, slanje push notifikacija kroz Expo Notifications API — funkcionalnost iz "Funkcionalnosti — mobilna app" #4, nije REST endpoint pa nije bila na popisu ruta) i cijeli mobilni/admin frontend
 - ✅ `sliptrack-mobile` inicijaliziran: `create-expo-app` s `blank-typescript` templateom; naknadno spušten s Expo SDK 57 na **SDK 54** (`npx expo install expo@^54.0.0` + `expo install --fix`) jer korisnikov Expo Go na iOS-u (verzija OS-a ne prima noviji Expo Go update) podržava samo do SDK 54 — trenutne verzije: Expo SDK 54, React 19.1.0, React Native 0.81.5, TypeScript 5.9.2
 - ✅ Istražena Expo Go kompatibilnost skeniranja: `expo-camera` PDF417 radi u Expo Go, ML Kit OCR biblioteke zahtijevaju development build (vidi "Plan implementacije skeniranja")
+- ✅ Auth flow testiran na fizičkom uređaju kroz Expo Go (register/login/logout, access+refresh token ciklus) — radi ispravno
+- ✅ Property CRUD implementiran na mobileu: `propertyApi.ts`, `PropertyListScreen` (lista + FAB za dodavanje), `PropertyFormScreen` (create/edit/delete u jednom ekranu, isti obrazac kao Login/Register — inline error, `err?.response?.data?.message`); brisanje nekretnine s postojećim uplatnicama sad ispravno hvata `409 Conflict` s backenda i prikazuje `Alert` s porukom umjesto tihog neuspjeha
+- ✅ Category/SubCategory read-only API sloj na mobileu (`categoryApi.ts`) — koristi ga PaymentSlip forma za dropdown kategorija/potkategorija
+- ✅ PaymentSlip ručni unos (Put 3 iz plana skeniranja) implementiran: `paymentSlipApi.ts`, `PaymentSlipListScreen` (kartice sa statusom/iznosom/kategorijom, brzi toggle statusa dodirom na badge), `PaymentSlipFormScreen` (create/edit/delete; kategorija/potkategorija dropdown preko `@react-native-picker/picker` s dinamičkim učitavanjem potkategorija; nekretnina dropdown prikazan samo kad odabrana potkategorija ima `allowsProperty`, isto pravilo kao backend `PaymentSlipService.resolveProperty`; datum dospijeća preko `@react-native-community/datetimepicker`, formatiran ručno iz lokalnih Date dijelova — ne `toISOString()`, da se izbjegne UTC timezone off-by-one bug kod ponoćnih lokalnih datuma)
+- ✅ Status promjena (PAID/UNPAID) ožičena na `PATCH /payment-slips/{id}/status` — dostupna kao brzi dodir na badge u listi i kao poseban gumb u formi, oba mjesta ažuriraju lokalni state iz odgovora servera bez punog refetcha
+- ✅ Oba nova native paketa (`@react-native-picker/picker`, `@react-native-community/datetimepicker`) potvrđena kao Expo Go kompatibilna na SDK 54 prije instalacije (provjereno na docs.expo.dev, po pravilu iz `sliptrack-mobile/AGENTS.md` da se prije pisanja koda čita točna verzionirana Expo dokumentacija)
 - ❌ `sliptrack-admin` nije inicijaliziran
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
@@ -300,7 +306,10 @@ Napomene:
 6. **React Native mobilna aplikacija (Expo init, auth, skeniranje, dashboard)** — dogovoreno da ide prije Admin web sučelja i prije podsjetnik-joba: mobile je glavni predmet rada i tehnički najrizičniji dio (kamera, barkod/OCR, native permisije), bolje rano otkriti probleme; podsjetnik-job šalje push na `UserDevice` tokene koji ne postoje dok mobitel ne registrira barem jedan (`POST /api/devices`), pa bi se testirao "na slijepo" bez mobitela. Vidi "Plan implementacije skeniranja" iznad za detalje.
    - ✅ Expo init (TypeScript template)
    - ✅ Expo Go vs development build istraženo i riješeno
-   - ❌ Struktura foldera, auth flow protiv `/api/auth`, navigation, skeniranje, dashboard
+   - ✅ Struktura foldera, auth flow protiv `/api/auth`, navigation — testirano na fizičkom uređaju
+   - ✅ Property CRUD ekrani (lista, forma create/edit/delete)
+   - ✅ PaymentSlip ručni unos (Put 3) — lista, forma create/edit/delete, kategorija/potkategorija/nekretnina dropdown, date picker, status toggle
+   - ❌ PDF417 skeniranje (Put 1), upload slike, dashboard ekrani, OCR (Put 2)
 7. Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API) — nakon mobitela, kad postoji barem jedan registriran `UserDevice` za stvarno testiranje push notifikacija
 8. React admin sučelje
 9. Testiranje

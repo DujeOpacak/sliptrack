@@ -239,3 +239,30 @@ Sutra
 
 Testirati auth flow (register/login/logout) na fizičkom uređaju preko Expo Go, SDK 54
 Krenuti na skeniranje (expo-camera PDF417) ili dashboard/payment-slip ekrane, ovisno o dogovoru
+
+29.07.2026. — Dan 6 — Property CRUD, PaymentSlip ručni unos, status toggle
+
+Što je napravljeno
+
+Testiran auth flow na fizičkom uređaju kroz Expo Go SDK 54 — register/login/logout radi ispravno
+Otkriven i riješen bug: login se vrtio u beskonačnom loading spinneru — uzrok je bila zastarjela LAN IP adresa hardkodirana u src/api/config.ts (računalo je promijenilo IP na WiFi mreži), pa je zahtjev s telefona visio bez odgovora umjesto da baci grešku; axios request bez timeouta ne baca iznimku na neaktivnu adresu, pa je isSubmitting ostajao true zauvijek
+Implementiran Property CRUD na mobileu: propertyApi.ts (getAll/getById/create/update/delete), PropertyListScreen (FlatList + FAB za dodavanje), PropertyFormScreen (create i edit u istom ekranu ovisno o postojanju propertyId route parametra, plus brisanje s Alert potvrdom)
+Dodani navigacijski tipovi (PropertyList, PropertyForm) u AppStackParamList, ekrani registrirani u RootNavigator, link "Moje nekretnine" dodan na HomeScreen
+Implementiran Category/SubCategory read-only API sloj (categoryApi.ts) — getAll() i getSubCategories(categoryId?) — priprema za PaymentSlip formu koja treba dropdown izbore
+Implementiran PaymentSlip ručni unos (Put 3 iz plana skeniranja, CLAUDE.md): paymentSlipApi.ts, PaymentSlipListScreen (kartice s davateljem/kategorijom/iznosom/statusom kao badge), PaymentSlipFormScreen (create/edit/delete)
+Prije uvođenja novih native paketa (date picker, dropdown select) provjerena Expo Go kompatibilnost na docs.expo.dev za SDK 54 — u skladu s pravilom iz sliptrack-mobile/AGENTS.md da se prije pisanja koda čita točna verzionirana dokumentacija; potvrđeno da @react-native-picker/picker i @react-native-community/datetimepicker rade u Expo Go, zatim instalirano preko npx expo install (auto-dodan config plugin za datetimepicker u app.json)
+PaymentSlipFormScreen: kategorija/potkategorija biraju se preko Picker dropdowna, potkategorije se dinamički učitavaju pri promjeni kategorije; nekretnina dropdown prikazan samo kad odabrana potkategorija ima allowsProperty (isto pravilo kao backend PaymentSlipService.resolveProperty), uz client-side validaciju da je potkategorija obavezna ako kategorija ima definirane potkategorije (zrcali backend pravilo iz resolveSubCategory)
+Datum dospijeća preko @react-native-community/datetimepicker; datum se formatira ručno iz lokalnih Date dijelova (formatDateLocal), ne preko toISOString() — potonji bi kod ponoćnog lokalnog vremena i pozitivnog UTC offseta (Hrvatska) mogao vratiti prethodni dan
+Otkriven i riješen UX bug: brisanje nekretnine/uplatnice s postojećim vezama (FK 409 Conflict s backenda) padalo je tiho — handleDelete nije imao try/catch pa korisnik nije dobio nikakvu povratnu informaciju kad je backend odbio brisanje. Riješeno dodavanjem try/catch i Alert.alert s porukom iz err.response.data.message, na oba mjesta (Property i PaymentSlip forma)
+Implementirana promjena statusa PAID/UNPAID (PATCH /payment-slips/{id}/status): paymentSlipApi.updateStatus(); dostupno kao brzi dodir na status badge u PaymentSlipListScreen (lokalno ažurira listu iz odgovora servera, bez punog refetcha) i kao poseban gumb u PaymentSlipFormScreen (samo kod uređivanja postojeće uplatnice)
+Ažuriran CLAUDE.md: trenutno stanje (2026-07-29), status u "Sljedeći koraci" koraku 6 (auth testiran, Property i PaymentSlip ručni unos gotovi, preostaje skeniranje/slika/dashboard/OCR)
+
+Problemi i rješenja
+
+Beskonačni loading spinner na loginu — zastarjela hardkodirana LAN IP adresa u config.ts (IP se promijenio na WiFi mreži), zahtjev je visio bez ikakvog odgovora; riješeno ažuriranjem IP-a, spomenuta trajna rješenja za budućnost (DHCP rezervacija ili expo start --tunnel)
+Tiho neuspjelo brisanje nekretnine/uplatnice s postojećim vezama — handleDelete nije hvatao grešku pa korisnik nije vidio zašto brisanje ne uspijeva; riješeno try/catch + Alert s porukom s backenda
+
+Sutra
+
+PDF417 skeniranje (Put 1) — expo-camera, parsiranje HUB-3 stringa, popunjavanje postojeće PaymentSlipForm
+Ili upload slike uplatnice (POST /{id}/image) i dashboard ekrani, ovisno o dogovoru

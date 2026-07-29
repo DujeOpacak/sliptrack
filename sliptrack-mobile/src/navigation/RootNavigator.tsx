@@ -6,6 +6,10 @@ import { useAuth } from "../context/AuthContext";
 import LoginScreen from "../screens/auth/LoginScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
 import HomeScreen from "../screens/app/HomeScreen";
+import PropertyListScreen from "../screens/app/PropertyListScreen";
+import PropertyFormScreen from "../screens/app/PropertyFormScreen";
+import PaymentSlipListScreen from "../screens/app/PaymentSlipListScreen";
+import PaymentSlipFormScreen from "../screens/app/PaymentSlipFormScreen";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -24,6 +28,26 @@ function AppNavigator() {
   return (
     <AppStack.Navigator>
       <AppStack.Screen name="Home" component={HomeScreen} />
+      <AppStack.Screen
+        name="PropertyList"
+        component={PropertyListScreen}
+        options={{ title: "Nekretnine" }}
+      />
+      <AppStack.Screen
+        name="PropertyForm"
+        component={PropertyFormScreen}
+        options={{ title: "Nekretnina" }}
+      />
+      <AppStack.Screen
+        name="PaymentSlipList"
+        component={PaymentSlipListScreen}
+        options={{ title: "Uplatnice" }}
+      />
+      <AppStack.Screen
+        name="PaymentSlipForm"
+        component={PaymentSlipFormScreen}
+        options={{ title: "Uplatnica" }}
+      />
     </AppStack.Navigator>
   );
 }
