@@ -37,7 +37,9 @@ public class DashboardController {
     }
 
     @GetMapping("/timeline")
-    public ResponseEntity<List<TimelinePointResponse>> getTimeline() {
-        return ResponseEntity.ok(dashboardService.getTimeline());
+    public ResponseEntity<List<TimelinePointResponse>> getTimeline(
+            @RequestParam(required = false) Integer months
+    ) {
+        return ResponseEntity.ok(dashboardService.getTimeline(months));
     }
 }

@@ -36,6 +36,7 @@ public class PaymentSlip {
 
     private String description;
 
+    @Column(nullable = false)
     private LocalDate dueDate;
 
     @Enumerated(EnumType.STRING)

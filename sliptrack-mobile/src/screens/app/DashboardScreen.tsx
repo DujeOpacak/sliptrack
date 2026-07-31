@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { dashboardApi } from "../../api/dashboardApi";
@@ -6,6 +6,7 @@ import { colors } from "../../theme/colors";
 import StatTile from "../../components/StatTile";
 import BarChart from "../../components/BarChart";
 import LineChart from "../../components/LineChart";
+import SelectField from "../../components/SelectField";
 import type {
   CategoryAmount,
   DashboardSummary,
@@ -14,6 +15,35 @@ import type {
 } from "../../types/dashboard";
 
 const formatEur = (value: number) => `${value.toFixed(2)} €`;
+const formatEurCompact = (value: number) => `${value.toFixed(0)} €`;
+
+const MONTHS_SHORT = [
+  "sij",
+  "velj",
+  "ožu",
+  "tra",
+  "svi",
+  "lip",
+  "srp",
+  "kol",
+  "ruj",
+  "lis",
+  "stu",
+  "pro",
+];
+
+function formatPeriodLabel(period: string) {
+  const [year, month] = period.split("-");
+  const monthIndex = Number(month) - 1;
+  return `${MONTHS_SHORT[monthIndex]} ${year.slice(2)}`;
+}
+
+const RANGE_OPTIONS = [
+  { label: "Zadnja 3 mjeseca", value: 3 },
+  { label: "Zadnjih 6 mjeseci", value: 6 },
+  { label: "Zadnjih 12 mjeseci", value: 12 },
+  { label: "Zadnja 24 mjeseca", value: 24 },
+];
 
 export default function DashboardScreen() {
   const [isLoading, setIsLoading] = useState(true);
@@ -21,6 +51,8 @@ export default function DashboardScreen() {
   const [byCategory, setByCategory] = useState<CategoryAmount[]>([]);
   const [byProvider, setByProvider] = useState<ProviderAmount[]>([]);
   const [timeline, setTimeline] = useState<TimelinePoint[]>([]);
+  const [timelineMonths, setTimelineMonths] = useState(6);
+  const [isTimelineLoading, setIsTimelineLoading] = useState(true);
 
   useFocusEffect(
     useCallback(() => {
@@ -30,14 +62,12 @@ export default function DashboardScreen() {
         dashboardApi.getSummary(),
         dashboardApi.getByCategory(),
         dashboardApi.getByProvider(),
-        dashboardApi.getTimeline(),
       ])
-        .then(([summaryData, categoryData, providerData, timelineData]) => {
+        .then(([summaryData, categoryData, providerData]) => {
           if (!isActive) return;
           setSummary(summaryData);
           setByCategory(categoryData);
           setByProvider(providerData.slice(0, 6));
-          setTimeline(timelineData);
         })
         .finally(() => {
           if (isActive) setIsLoading(false);
@@ -47,6 +77,22 @@ export default function DashboardScreen() {
       };
     }, []),
   );
+
+  useEffect(() => {
+    let isActive = true;
+    setIsTimelineLoading(true);
+    dashboardApi
+      .getTimeline(timelineMonths)
+      .then((data) => {
+        if (isActive) setTimeline(data);
+      })
+      .finally(() => {
+        if (isActive) setIsTimelineLoading(false);
+      });
+    return () => {
+      isActive = false;
+    };
+  }, [timelineMonths]);
 
   if (isLoading) {
     return (
@@ -93,11 +139,30 @@ export default function DashboardScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>Troškovi kroz vrijeme</Text>
-      <View style={styles.card}>
-        <LineChart
-          data={timeline.map((t) => ({ label: t.period, value: t.totalAmount }))}
-          formatValue={formatEur}
+      <View style={styles.rangeSelect}>
+        <SelectField
+          label="Razdoblje"
+          placeholder="Zadnjih 6 mjeseci"
+          value={timelineMonths}
+          options={RANGE_OPTIONS}
+          onChange={(value) => setTimelineMonths(value ?? 6)}
         />
+      </View>
+      <View style={styles.card}>
+        {isTimelineLoading ? (
+          <View style={styles.timelineLoading}>
+            <ActivityIndicator />
+          </View>
+        ) : (
+          <LineChart
+            key={timelineMonths}
+            data={timeline.map((t) => ({
+              label: formatPeriodLabel(t.period),
+              value: t.totalAmount,
+            }))}
+            formatValue={formatEurCompact}
+          />
+        )}
       </View>
     </ScrollView>
   );
@@ -106,6 +171,8 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.page },
   content: { padding: 16, paddingBottom: 32 },
+  rangeSelect: { marginBottom: 8 },
+  timelineLoading: { height: 160, justifyContent: "center", alignItems: "center" },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
   statRow: { flexDirection: "row", gap: 12 },
   sectionTitle: {

@@ -28,11 +28,12 @@ public class PaymentSlipController {
             @RequestParam(required = false) PaymentStatus status,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) Long subCategoryId,
+            @RequestParam(required = false) Long propertyId,
             @RequestParam(required = false) String providerName,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateTo
     ) {
-        return ResponseEntity.ok(paymentSlipService.getAll(status, categoryId, subCategoryId, providerName, dueDateFrom, dueDateTo));
+        return ResponseEntity.ok(paymentSlipService.getAll(status, categoryId, subCategoryId, propertyId, providerName, dueDateFrom, dueDateTo));
     }
 
     @GetMapping("/{id}")

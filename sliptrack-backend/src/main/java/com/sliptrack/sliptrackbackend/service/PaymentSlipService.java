@@ -33,7 +33,7 @@ public class PaymentSlipService {
     private final PaymentSlipImageService paymentSlipImageService;
 
     public List<PaymentSlipResponse> getAll(PaymentStatus status, Long categoryId, Long subCategoryId,
-                                             String providerName, LocalDate dueDateFrom, LocalDate dueDateTo) {
+                                             Long propertyId, String providerName, LocalDate dueDateFrom, LocalDate dueDateTo) {
         User currentUser = currentUserService.getCurrentUser();
 
         Specification<PaymentSlip> spec = (root, query, cb) -> cb.equal(root.get("user").get("id"), currentUser.getId());
@@ -46,6 +46,9 @@ public class PaymentSlipService {
         }
         if (subCategoryId != null) {
             spec = spec.and((root, query, cb) -> cb.equal(root.get("subCategory").get("id"), subCategoryId));
+        }
+        if (propertyId != null) {
+            spec = spec.and((root, query, cb) -> cb.equal(root.get("property").get("id"), propertyId));
         }
         if (providerName != null && !providerName.isBlank()) {
             spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("providerName")), "%" + providerName.toLowerCase() + "%"));

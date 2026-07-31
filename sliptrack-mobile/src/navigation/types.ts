@@ -17,6 +17,7 @@ export type AppStackParamList = {
   AppTabs: undefined;
   AddChoice: undefined;
   ScanPaymentSlip: undefined;
+  Notifications: undefined;
   PropertyForm: { propertyId: number } | undefined;
   PaymentSlipForm:
     | { paymentSlipId: number }

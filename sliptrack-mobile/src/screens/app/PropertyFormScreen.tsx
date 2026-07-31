@@ -88,15 +88,17 @@ export default function PropertyFormScreen({ navigation, route }: Props) {
 
   return (
     <View style={styles.container}>
+      <Text style={styles.label}>Naziv</Text>
       <TextInput
         style={styles.input}
-        placeholder="Naziv (npr. Stan Zagreb)"
+        placeholder="npr. Stan Zagreb"
         value={name}
         onChangeText={setName}
       />
+      <Text style={styles.label}>Adresa</Text>
       <TextInput
         style={styles.input}
-        placeholder="Adresa"
+        placeholder="npr. Ilica 1, Zagreb"
         value={address}
         onChangeText={setAddress}
       />
@@ -124,6 +126,7 @@ export default function PropertyFormScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 24 },
   center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  label: { fontSize: 14, color: "#666", marginBottom: 4, marginTop: 4 },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",

@@ -25,9 +25,10 @@ export const dashboardApi = {
     );
     return response.data;
   },
-  async getTimeline() {
+  async getTimeline(months?: number) {
     const response = await apiClient.get<TimelinePoint[]>(
       "/dashboard/timeline",
+      { params: { months } },
     );
     return response.data;
   },

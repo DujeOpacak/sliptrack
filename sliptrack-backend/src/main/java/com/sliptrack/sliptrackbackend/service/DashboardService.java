@@ -14,7 +14,11 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -70,11 +74,21 @@ public class DashboardService {
         return paymentSlipRepository.sumAmountGroupedByProvider(currentUser.getId());
     }
 
-    public List<TimelinePointResponse> getTimeline() {
+    public List<TimelinePointResponse> getTimeline(Integer months) {
         User currentUser = currentUserService.getCurrentUser();
+        int rangeMonths = (months == null || months < 1) ? 6 : months;
 
-        return paymentSlipRepository.sumAmountGroupedByMonth(currentUser.getId()).stream()
-                .map(row -> new TimelinePointResponse((String) row[0], (BigDecimal) row[1]))
-                .toList();
+        Map<String, BigDecimal> totalsByPeriod = paymentSlipRepository.sumAmountGroupedByMonth(currentUser.getId()).stream()
+                .collect(Collectors.toMap(row -> (String) row[0], row -> (BigDecimal) row[1]));
+
+        YearMonth end = YearMonth.now();
+        YearMonth start = end.minusMonths(rangeMonths - 1L);
+
+        List<TimelinePointResponse> result = new ArrayList<>();
+        for (YearMonth ym = start; !ym.isAfter(end); ym = ym.plusMonths(1)) {
+            String period = ym.toString();
+            result.add(new TimelinePointResponse(period, totalsByPeriod.getOrDefault(period, BigDecimal.ZERO)));
+        }
+        return result;
     }
 }

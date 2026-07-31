@@ -28,6 +28,7 @@ public class PaymentSlipRequest {
 
     private String description;
 
+    @NotNull
     private LocalDate dueDate;
 
     @NotNull

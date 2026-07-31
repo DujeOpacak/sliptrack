@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   View,
   Text,
@@ -10,8 +10,9 @@ import {
   Alert,
   Platform,
   Image,
+  Modal,
 } from "react-native";
-import { Picker } from "@react-native-picker/picker";
+import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -23,6 +24,7 @@ import type { Category, SubCategory } from "../../types/category";
 import type { Property } from "../../types/property";
 import type { PaymentStatus } from "../../types/paymentSlip";
 import { colors } from "../../theme/colors";
+import SelectField from "../../components/SelectField";
 
 interface PickedImage {
   uri: string;
@@ -70,6 +72,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [draftPaidAt, setDraftPaidAt] = useState(new Date());
   const [pickedImage, setPickedImage] = useState<PickedImage | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [isViewerVisible, setIsViewerVisible] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
@@ -78,6 +81,10 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [categoryId, setCategoryId] = useState<number | undefined>();
   const [subCategoryId, setSubCategoryId] = useState<number | undefined>();
   const [propertyId, setPropertyId] = useState<number | undefined>();
+
+  // Stabilna referenca — new Date() ne smije se računati iznova pri svakom rendera
+  // dok je Android picker otvoren, jer se native modul zbuni i resetira prikaz na epoch (01.01.1970).
+  const today = useMemo(() => new Date(), []);
 
   const selectedSubCategory = subCategories.find((sc) => sc.id === subCategoryId);
   const allowsProperty = selectedSubCategory?.allowsProperty ?? false;
@@ -196,6 +203,10 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       setError("Ova kategorija ima potkategorije — potkategorija je obavezna.");
       return;
     }
+    if (!dueDate) {
+      setError("Datum dospijeća je obavezan.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -206,7 +217,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         paymentModel: paymentModel || undefined,
         providerName: providerName || undefined,
         description: description || undefined,
-        dueDate: dueDate ? formatDateLocal(dueDate) : undefined,
+        dueDate: formatDateLocal(dueDate),
         categoryId,
         subCategoryId,
         propertyId,
@@ -370,16 +381,50 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         </View>
       )}
       <Text style={styles.label}>Fotografija uplatnice</Text>
-      <Pressable style={styles.imagePicker} onPress={handlePickImage}>
+      <Pressable
+        style={styles.imagePicker}
+        onPress={() =>
+          pickedImage || existingImageUrl ? setIsViewerVisible(true) : handlePickImage()
+        }
+      >
         {pickedImage || existingImageUrl ? (
-          <Image
-            source={{ uri: pickedImage?.uri ?? existingImageUrl! }}
-            style={styles.imagePreview}
-          />
+          <>
+            <Image
+              source={{ uri: pickedImage?.uri ?? existingImageUrl! }}
+              style={styles.imagePreview}
+            />
+            <Pressable style={styles.imageChangeButton} onPress={handlePickImage}>
+              <Ionicons name="camera" size={18} color="#fff" />
+            </Pressable>
+          </>
         ) : (
           <Text style={styles.imagePickerText}>+ Dodaj fotografiju</Text>
         )}
       </Pressable>
+
+      <Modal
+        visible={isViewerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIsViewerVisible(false)}
+      >
+        <Pressable
+          style={styles.viewerBackdrop}
+          onPress={() => setIsViewerVisible(false)}
+        >
+          <Image
+            source={{ uri: pickedImage?.uri ?? existingImageUrl ?? "" }}
+            style={styles.viewerImage}
+            resizeMode="contain"
+          />
+          <Pressable
+            style={styles.viewerCloseButton}
+            onPress={() => setIsViewerVisible(false)}
+          >
+            <Ionicons name="close" size={28} color="#fff" />
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Text style={styles.label}>IBAN primatelja</Text>
       <TextInput
@@ -435,7 +480,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       </Pressable>
       {showDatePicker && (
         <DateTimePicker
-          value={dueDate ?? new Date()}
+          value={dueDate ?? today}
           mode="date"
           onChange={(event, selectedDate) => {
             setShowDatePicker(Platform.OS === "ios");
@@ -446,53 +491,32 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         />
       )}
 
-      <Text style={styles.label}>Kategorija</Text>
-      <View style={styles.pickerWrapper}>
-        <Picker
-          selectedValue={categoryId}
-          onValueChange={(value) => value && handleCategoryChange(Number(value))}
-        >
-          <Picker.Item label="-- odaberi kategoriju --" value={undefined} />
-          {categories.map((c) => (
-            <Picker.Item key={c.id} label={c.name} value={c.id} />
-          ))}
-        </Picker>
-      </View>
+      <SelectField
+        label="Kategorija"
+        placeholder="-- odaberi kategoriju --"
+        value={categoryId}
+        options={categories.map((c) => ({ label: c.name, value: c.id }))}
+        onChange={(value) => value && handleCategoryChange(value)}
+      />
 
       {subCategories.length > 0 && (
-        <>
-          <Text style={styles.label}>Potkategorija</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={subCategoryId}
-              onValueChange={(value) =>
-                handleSubCategoryChange(value ? Number(value) : undefined)
-              }
-            >
-              <Picker.Item label="-- odaberi potkategoriju --" value={undefined} />
-              {subCategories.map((sc) => (
-                <Picker.Item key={sc.id} label={sc.name} value={sc.id} />
-              ))}
-            </Picker>
-          </View>
-        </>
+        <SelectField
+          label="Potkategorija"
+          placeholder="-- odaberi potkategoriju --"
+          value={subCategoryId}
+          options={subCategories.map((sc) => ({ label: sc.name, value: sc.id }))}
+          onChange={handleSubCategoryChange}
+        />
       )}
 
       {allowsProperty && (
-        <>
-          <Text style={styles.label}>Nekretnina</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={propertyId}
-              onValueChange={(value) => setPropertyId(value ? Number(value) : undefined)}
-            >
-              <Picker.Item label="-- bez nekretnine --" value={undefined} />
-              {properties.map((p) => (
-                <Picker.Item key={p.id} label={p.name} value={p.id} />
-              ))}
-            </Picker>
-          </View>
-        </>
+        <SelectField
+          label="Nekretnina"
+          placeholder="-- bez nekretnine --"
+          value={propertyId}
+          options={properties.map((p) => ({ label: p.name, value: p.id }))}
+          onChange={setPropertyId}
+        />
       )}
 
       {error && <Text style={styles.error}>{error}</Text>}
@@ -565,15 +589,33 @@ const styles = StyleSheet.create({
   },
   imagePickerText: { color: colors.primary, fontSize: 15, fontWeight: "600" },
   imagePreview: { width: "100%", height: "100%" },
+  imageChangeButton: {
+    position: "absolute",
+    bottom: 8,
+    right: 8,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    borderRadius: 16,
+    width: 32,
+    height: 32,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  viewerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.9)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  viewerImage: { width: "100%", height: "80%" },
+  viewerCloseButton: {
+    position: "absolute",
+    top: 48,
+    right: 24,
+    padding: 8,
+  },
   dateText: { fontSize: 16, color: "#000" },
   datePlaceholder: { fontSize: 16, color: "#999" },
   label: { fontSize: 14, color: "#666", marginBottom: 4, marginTop: 4 },
-  pickerWrapper: {
-    borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 8,
-    marginBottom: 12,
-  },
   button: {
     backgroundColor: "#2563eb",
     borderRadius: 8,

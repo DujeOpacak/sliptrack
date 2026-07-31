@@ -8,7 +8,7 @@ export interface PaymentSlip {
   paymentModel: string | null;
   providerName: string | null;
   description: string | null;
-  dueDate: string | null;
+  dueDate: string;
   status: PaymentStatus;
   paidAt: string | null;
   imageUrl: string | null;
@@ -22,6 +22,15 @@ export interface PaymentSlip {
   createdAt: string;
 }
 
+export interface PaymentSlipFilters {
+  status?: PaymentStatus;
+  categoryId?: number;
+  subCategoryId?: number;
+  propertyId?: number;
+  dueDateFrom?: string;
+  dueDateTo?: string;
+}
+
 export interface PaymentSlipRequest {
   iban: string;
   amount: number;
@@ -29,7 +38,7 @@ export interface PaymentSlipRequest {
   paymentModel?: string;
   providerName?: string;
   description?: string;
-  dueDate?: string;
+  dueDate: string;
   categoryId: number;
   subCategoryId?: number;
   propertyId?: number;

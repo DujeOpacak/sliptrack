@@ -10,6 +10,7 @@ import PropertyFormScreen from "../screens/app/PropertyFormScreen";
 import PaymentSlipFormScreen from "../screens/app/PaymentSlipFormScreen";
 import AddChoiceScreen from "../screens/app/AddChoiceScreen";
 import ScanScreen from "../screens/app/ScanScreen";
+import NotificationListScreen from "../screens/app/NotificationListScreen";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -51,6 +52,11 @@ function AppNavigator() {
         name="PaymentSlipForm"
         component={PaymentSlipFormScreen}
         options={{ title: "Uplatnica", presentation: "modal" }}
+      />
+      <AppStack.Screen
+        name="Notifications"
+        component={NotificationListScreen}
+        options={{ title: "Obavijesti" }}
       />
     </AppStack.Navigator>
   );

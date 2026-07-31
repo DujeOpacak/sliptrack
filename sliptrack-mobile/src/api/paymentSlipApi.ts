@@ -1,13 +1,16 @@
 import { apiClient } from "./client";
 import type {
   PaymentSlip,
+  PaymentSlipFilters,
   PaymentSlipRequest,
   PaymentStatus,
 } from "../types/paymentSlip";
 
 export const paymentSlipApi = {
-  async getAll() {
-    const response = await apiClient.get<PaymentSlip[]>("/payment-slips");
+  async getAll(filters?: PaymentSlipFilters) {
+    const response = await apiClient.get<PaymentSlip[]>("/payment-slips", {
+      params: filters,
+    });
     return response.data;
   },
   async getById(id: number) {
