@@ -7,8 +7,23 @@ import React, {
 } from "react";
 import { authApi } from "../api/authApi";
 import { setOnSessionExpired } from "../api/client";
+import { deviceApi } from "../api/deviceApi";
 import { tokenStorage } from "../api/tokenStorage";
+import { getExpoPushRegistration } from "../utils/registerPushToken";
 import type { AuthUser, LoginRequest, RegisterRequest } from "../types/auth";
+
+async function registerDeviceForPush() {
+  try {
+    const registration = await getExpoPushRegistration();
+    if (!registration) {
+      return;
+    }
+    const device = await deviceApi.register(registration);
+    await tokenStorage.saveDeviceId(device.id);
+  } catch {
+    // Best-effort — push registration must never block login/app startup.
+  }
+}
 
 interface AuthContextValue {
   user: AuthUser | null;
@@ -32,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       ]);
       if (accessToken && storedUser) {
         setUser(storedUser);
+        registerDeviceForPush();
       }
       setIsLoading(false);
     })();
@@ -56,6 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     await tokenStorage.saveUser(authUser);
     setUser(authUser);
+    registerDeviceForPush();
   }, []);
 
   const register = useCallback(async (request: RegisterRequest) => {
@@ -69,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
     await tokenStorage.saveUser(authUser);
     setUser(authUser);
+    registerDeviceForPush();
   }, []);
 
   const logout = useCallback(async () => {
@@ -76,6 +94,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (refreshToken) {
       // Best-effort — if the network call fails, still clear local state so the user isn't stuck logged in.
       await authApi.logout(refreshToken).catch(() => {});
+    }
+    const deviceId = await tokenStorage.getDeviceId();
+    if (deviceId) {
+      // Best-effort — device row already scoped to this user, no reason to block logout on it.
+      await deviceApi.delete(deviceId).catch(() => {});
     }
     await tokenStorage.clearTokens();
     setUser(null);

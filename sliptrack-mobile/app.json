@@ -23,6 +23,7 @@
     },
     "plugins": [
       "expo-secure-store",
+      "expo-notifications",
       "@react-native-community/datetimepicker",
       [
         "expo-camera",
@@ -36,7 +37,14 @@
           "photosPermission": "SlipTrack treba pristup galeriji za odabir fotografije uplatnice.",
           "cameraPermission": "SlipTrack koristi kameru za fotografiranje uplatnice."
         }
-      ]
-    ]
+      ],
+      "expo-font"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "23a6e25c-b900-46a8-a9d7-22eccc43067a"
+      }
+    },
+    "owner": "dujeopacak"
   }
 }
