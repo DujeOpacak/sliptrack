@@ -2,6 +2,7 @@ package com.sliptrack.sliptrackbackend.service;
 
 import com.sliptrack.sliptrackbackend.dto.NotificationResponse;
 import com.sliptrack.sliptrackbackend.model.Notification;
+import com.sliptrack.sliptrackbackend.model.PaymentSlip;
 import com.sliptrack.sliptrackbackend.model.User;
 import com.sliptrack.sliptrackbackend.repository.NotificationRepository;
 import com.sliptrack.sliptrackbackend.security.CurrentUserService;
@@ -36,6 +37,16 @@ public class NotificationService {
         notification.setRead(true);
 
         return toResponse(notificationRepository.save(notification));
+    }
+
+    public void create(User user, PaymentSlip paymentSlip, String message) {
+        Notification notification = Notification.builder()
+                .user(user)
+                .paymentSlip(paymentSlip)
+                .message(message)
+                .build();
+
+        notificationRepository.save(notification);
     }
 
     private NotificationResponse toResponse(Notification notification) {

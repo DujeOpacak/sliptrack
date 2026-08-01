@@ -368,6 +368,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       {showPaidAtPicker && (
         <View style={styles.paidAtPickerWrapper}>
           <DateTimePicker
+            key={route.key}
             value={draftPaidAt}
             mode="date"
             maximumDate={new Date()}
@@ -480,6 +481,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       </Pressable>
       {showDatePicker && (
         <DateTimePicker
+          key={route.key}
           value={dueDate ?? today}
           mode="date"
           onChange={(event, selectedDate) => {

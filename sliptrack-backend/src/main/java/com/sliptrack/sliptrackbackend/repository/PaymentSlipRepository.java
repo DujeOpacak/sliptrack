@@ -3,6 +3,7 @@ package com.sliptrack.sliptrackbackend.repository;
 import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.ProviderAmountResponse;
+import com.sliptrack.sliptrackbackend.enums.PaymentStatus;
 import com.sliptrack.sliptrackbackend.model.PaymentSlip;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
@@ -11,6 +12,7 @@ import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,6 +30,26 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
     boolean existsBySubCategoryId(Long subCategoryId);
 
     boolean existsByPropertyId(Long propertyId);
+
+    List<PaymentSlip> findByStatusAndDueDateBetween(PaymentStatus status, LocalDate from, LocalDate to);
+
+    List<PaymentSlip> findByStatusAndDueDate(PaymentStatus status, LocalDate dueDate);
+
+    List<PaymentSlip> findByStatusAndDueDateBefore(PaymentStatus status, LocalDate dueDate);
+
+    List<PaymentSlip> findByUserIdAndProviderNameOrderByDueDateAsc(Long userId, String providerName);
+
+    boolean existsByUserIdAndProviderNameAndStatusAndDueDateBetween(
+            Long userId, String providerName, PaymentStatus status, LocalDate from, LocalDate to);
+
+    @Query("""
+            SELECT p.user.id, p.providerName
+            FROM PaymentSlip p
+            WHERE p.providerName IS NOT NULL AND p.providerName <> ''
+            GROUP BY p.user.id, p.providerName
+            HAVING COUNT(p) >= 3
+            """)
+    List<Object[]> findUserProviderPairsWithMinimumHistory();
 
     @Query("""
             SELECT new com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse(

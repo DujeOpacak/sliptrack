@@ -36,6 +36,8 @@ public class RecurringPattern {
 
     private LocalDate nextPredictedDate;
 
+    private LocalDate lastReminderSentAt;
+
     @UpdateTimestamp
     @Column(nullable = false)
     private LocalDateTime updatedAt;

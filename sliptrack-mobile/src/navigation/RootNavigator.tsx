@@ -3,6 +3,7 @@ import { View, ActivityIndicator } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { useAuth } from "../context/AuthContext";
+import { NotificationProvider } from "../context/NotificationContext";
 import LoginScreen from "../screens/auth/LoginScreen";
 import RegisterScreen from "../screens/auth/RegisterScreen";
 import AppTabNavigator from "./AppTabNavigator";
@@ -26,6 +27,14 @@ function AuthNavigator() {
 }
 
 function AppNavigator() {
+  return (
+    <NotificationProvider>
+      <AppNavigatorStack />
+    </NotificationProvider>
+  );
+}
+
+function AppNavigatorStack() {
   return (
     <AppStack.Navigator>
       <AppStack.Screen

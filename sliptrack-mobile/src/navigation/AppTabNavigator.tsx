@@ -11,6 +11,7 @@ import PropertyListScreen from "../screens/app/PropertyListScreen";
 import ProfileScreen from "../screens/app/ProfileScreen";
 import CenterAddButton from "../components/CenterAddButton";
 import { colors } from "../theme/colors";
+import { useNotifications } from "../context/NotificationContext";
 import type { AppTabParamList, AppStackParamList } from "./types";
 
 export type AppTabScreenProps<T extends keyof AppTabParamList> = CompositeScreenProps<
@@ -25,6 +26,8 @@ function EmptyScreen() {
 }
 
 export default function AppTabNavigator() {
+  const { unreadCount } = useNotifications();
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -87,6 +90,7 @@ export default function AppTabNavigator() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="person-outline" size={size} color={color} />
           ),
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
         }}
       />
     </Tab.Navigator>

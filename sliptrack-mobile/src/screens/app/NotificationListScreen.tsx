@@ -11,6 +11,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { AppStackParamList } from "../../navigation/types";
 import { notificationApi } from "../../api/notificationApi";
+import { useNotifications } from "../../context/NotificationContext";
 import type { Notification } from "../../types/notification";
 import { colors } from "../../theme/colors";
 
@@ -24,6 +25,7 @@ function formatSentAt(sentAt: string) {
 export default function NotificationListScreen({ navigation }: Props) {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { refreshUnreadCount } = useNotifications();
 
   useFocusEffect(
     useCallback(() => {
@@ -50,6 +52,7 @@ export default function NotificationListScreen({ navigation }: Props) {
         setNotifications((prev) =>
           prev.map((n) => (n.id === updated.id ? updated : n)),
         );
+        refreshUnreadCount();
       } catch {
         // best-effort — obavijest ostaje neoznačena, korisnik može ponoviti
       }

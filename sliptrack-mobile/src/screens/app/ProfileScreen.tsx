@@ -1,5 +1,6 @@
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useAuth } from "../../context/AuthContext";
+import { useNotifications } from "../../context/NotificationContext";
 import { colors } from "../../theme/colors";
 import type { AppTabScreenProps } from "../../navigation/AppTabNavigator";
 
@@ -7,6 +8,7 @@ type Props = AppTabScreenProps<"Profile">;
 
 export default function ProfileScreen({ navigation }: Props) {
   const { user, logout } = useAuth();
+  const { unreadCount } = useNotifications();
 
   return (
     <View style={styles.container}>
@@ -16,7 +18,9 @@ export default function ProfileScreen({ navigation }: Props) {
         style={styles.secondaryButton}
         onPress={() => navigation.navigate("Notifications")}
       >
-        <Text style={styles.secondaryButtonText}>Obavijesti</Text>
+        <Text style={styles.secondaryButtonText}>
+          Obavijesti{unreadCount > 0 ? ` (${unreadCount})` : ""}
+        </Text>
       </Pressable>
       <Pressable style={styles.button} onPress={() => logout()}>
         <Text style={styles.buttonText}>Odjava</Text>

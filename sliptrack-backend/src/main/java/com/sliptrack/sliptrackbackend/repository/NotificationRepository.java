@@ -11,4 +11,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     List<Notification> findByUserIdOrderBySentAtDesc(Long userId);
 
     Optional<Notification> findByIdAndUserId(Long id, Long userId);
+
+    boolean existsByPaymentSlipIdAndMessageStartingWith(Long paymentSlipId, String prefix);
 }

@@ -359,3 +359,36 @@ Fotografija uplatnice nije se učitavala na fizičkom uređaju iako je bila u Mi
 Sutra
 
 OCR (Put 2, zahtijeva development build) — ili backend @Scheduled podsjetnik-job, ovisno o dogovoru
+
+01.08.2026. — Dan 8 — @Scheduled podsjetnik-job, badge nepročitanih obavijesti
+
+Što je napravljeno
+
+Dogovoreno da se prvo implementira @Scheduled podsjetnik-job (RecurringPattern analiza + Notification + Expo push), prije prelaska na sliptrack-admin
+Implementiran RecurringPatternRepository (findByUserIdAndProviderName, findByNextPredictedDateBetween), PaymentSlipRepository dobio findUserProviderPairsWithMinimumHistory (GROUP BY user+provider s HAVING COUNT >= 3, prag dogovoren s korisnikom da izbjegne nepouzdane predikcije na 1-2 podatka), findByUserIdAndProviderNameOrderByDueDateAsc, findByStatusAndDueDateBetween/findByStatusAndDueDate/findByStatusAndDueDateBefore (dodavani postupno kako su se otkrivali novi slučajevi tijekom sesije)
+Implementiran RecurringPatternService.recomputeAll() — prosjek dana u mjesecu i iznosa po (user, providerName) s min. 3 povijesna zapisa, nextPredictedDate = zadnji dueDate + 1 mjesec s danom clampanim na YearMonth.lengthOfMonth() (izbjegava pucanje kod npr. dana 31 u veljači)
+Implementiran ExpoPushService — RestClient POST na https://exp.host/--/api/v2/push/send po uređaju, greške hvaćene i logirane (@Slf4j) bez rušenja joba; NotificationService dobio create(user, paymentSlip, message) — novu metodu koja ne prolazi kroz CurrentUserService jer @Scheduled job nema autenticiranog korisnika u SecurityContextu (za razliku od postojećih getAll/markAsRead)
+Implementiran ReminderService (@EnableScheduling na SliptrackBackendApplication, reminder.cron i reminder.days-ahead u application.properties) — prva verzija imala samo dva slučaja (uskoro dospijeva unutar N dana + predikcija), kasnije prošireno na 4 nakon rasprave s korisnikom o UX-u podsjetnika
+Otkriven i riješen stale payer_name stupac u recurring_patterns tablici (ostatak od prije preimenovanja payerName → providerName na Dan 4, ddl-auto=update ne briše/preimenuje stare stupce) — NOT NULL constraint na tom stupcu je blokirao prvi insert; provjereno da je tablica prazna, stupac ručno obrisan (ALTER TABLE ... DROP COLUMN)
+Korisnik testirao prvu verziju ručnim namještanjem test podataka (3 povijesne uplatnice istog providera razmaknute mjesec dana, plus zasebne UNPAID uplatnice s bliskim dueDate) i privremenim ubrzavanjem reminder.cron na svake minute — potvrđeno ispravno u bazi (recurring_patterns izračun, notifications zapisi) i uživo na iOS uređaju
+Na korisnikovo pitanje razjašnjeno da hard-case ("uskoro dospijeva") šalje samo JEDNOM po uplatnici ikad (dedup preko existsByPaymentSlipId bez vremenskog ograničenja), ne periodično — nakon rasprave o UX-u dogovoren hibridni pristup umjesto čistog jednokratnog ili čisto periodičkog: rani podsjetnik (N dana prije) + poseban podsjetnik na sam dan dospijeća, bez ponavljanja nakon toga (izbjegava spam kod osobnih financija)
+Refaktoriran sendDueSoonReminders() u sendUpcomingReminders() (sutra..+N dana) i sendDueTodayReminders() (točno danas) — dedup promijenjen s existsByPaymentSlipId na existsByPaymentSlipIdAndMessageStartingWith s odvojenim prefiksima poruke po slučaju ("Uskoro dospijeva"/"Danas dospijeva"), da se slučajevi mogu neovisno dedup-irati za istu uplatnicu
+Na korisnikovo pitanje ("što ako prođe datum dospijeća a uplatnica još nije plaćena") razjašnjeno da trenutna implementacija tad ništa ne šalje — dogovoren treći, simetričan slučaj (jednokratni "dospjelo, neplaćeno" podsjetnik), bez periodičkog ponavljanja iz istog razloga kao gore
+Implementiran sendOverdueReminders() (dueDate < danas, status UNPAID, prefiks "Dospjelo, neplaćena") — sad ukupno 4 neovisna slučaja u ReminderService: uskoro dospijeva, danas dospijeva, dospjelo neplaćeno, očekivana uplatnica (predikcija)
+Otkriven i riješen drugi, uzročno različit DateTimePicker bug od ranijeg Android epoch buga (Dan 7) — na iOS-u, kod uzastopnog skeniranja više uplatnica unutar iste app sesije (bez restarta), datum dospijeća se kod svakog sljedećeg unosa (2., 3., 4.) mogao postaviti samo na 1.1.1970. ili starije, dok je prvo skeniranje u sesiji radilo ispravno; restart app-a privremeno rješavao problem. Analizom koda isključen JS uzrok (dueDate state i today useMemo ispravno se resetiraju pri svakom mountu PaymentSlipFormScreen-a, navigacijski lanac AddChoice→Scan→Form preko navigation.replace stvara genuinely nov route.key po svakom dodavanju) — zaključeno da je uzrok na native razini (React Native reciklira UIDatePicker view umjesto potpunog unmount/remount ciklusa kroz više uzastopnih montiranja). Riješeno dodavanjem key={route.key} na oba DateTimePicker-a u PaymentSlipFormScreen (dospijeće i plaćeno) — route.key je jedinstven po instanci ekrana, forsira React da svaki put stvori posve svjež native view
+Korisnik ponovio test sa 4 uzastopna skeniranja nakon fixa — potvrđeno da radi ispravno na svakom od njih
+Implementiran badge nepročitanih obavijesti na mobileu: NotificationContext.tsx (novi, src/context/) — unreadCount state, refreshUnreadCount() dohvaća punu listu i broji !read (namjerno bez novog backend endpointa, postojeći GET /notifications je dovoljan za trenutnu veličinu podataka), osvježava se pri mountu providera i preko Notifications.addNotificationReceivedListener (expo-notifications) da se broj ažurira odmah čim push stigne dok je app otvorena, bez pollinga
+AppNavigator u RootNavigator.tsx omotan u NotificationProvider (samo za prijavljenog korisnika); AppTabNavigator.tsx — Profil tab dobio tabBarBadge={unreadCount > 0 ? unreadCount : undefined} (nativna React Navigation bottom-tabs funkcionalnost, bez ručnog crtanja); ProfileScreen.tsx — "Obavijesti" gumb prikazuje broj u zagradi; NotificationListScreen.tsx poziva refreshUnreadCount() nakon markAsRead da badge odmah padne bez čekanja sljedećeg pusha
+Razjašnjeno (na korisnikovo pitanje) da je HikariCP "Thread starvation or clock leap detected" upozorenje bezopasno — housekeeper thread otkriva da je JVM proces bio suspendiran (laptop otišao u sleep/zaključan) dulje nego očekivano; ne znači propalu konekciju na bazu, jedini praktični efekt je da je propušteni @Scheduled tick unutar tog perioda izgubljen (Spring ne nadoknađuje propuštena pokretanja)
+Ažuriran CLAUDE.md: trenutno stanje (2026-08-01, novi bulleti za reminder job/badge/oba bugfixa), status stavke 7 u "Sljedeći koraci" (✅ automatski podsjetnici)
+
+Problemi i rješenja
+
+Stale payer_name NOT NULL stupac u recurring_patterns (ostatak od preimenovanja na Dan 4) blokirao prvi insert — riješeno ručnim ALTER TABLE DROP COLUMN nakon potvrde da je tablica prazna
+iOS DateTimePicker dopuštao biranje samo datuma ≤ 1.1.1970. od drugog uzastopnog skeniranja nadalje unutar iste app sesije (native view recikliranje, ne JS state bug) — riješeno key={route.key} na oba DateTimePicker-a u PaymentSlipFormScreen
+Hard-case podsjetnik izvorno slao samo jednom ikad bez razlikovanja "rano" vs "na dan" — nakon razgovora o UX-u prošireno na hibridni pristup (rano + na dan + dospjelo), izbjegnuto čisto periodičko ponavljanje zbog rizika od spama
+
+Sutra
+
+sliptrack-admin (React web sučelje) — inicijalizacija projekta, upravljanje kategorijama/potkategorijama, korisnicima, statistike
+Ili OCR (Put 2, zahtijeva development build), ovisno o dogovoru
