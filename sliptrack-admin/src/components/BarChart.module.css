@@ -1,0 +1,50 @@
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.label {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track {
+  flex: 1;
+  height: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  position: relative;
+}
+
+.bar {
+  height: 100%;
+  background: var(--accent);
+  /* 2px surface gap so a full-width bar never touches the track border */
+  min-width: 2px;
+}
+
+.value {
+  width: 40px;
+  flex-shrink: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.empty {
+  color: var(--text-muted);
+  font-size: 13px;
+}

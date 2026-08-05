@@ -1,0 +1,30 @@
+.shell {
+  display: flex;
+  min-height: 100svh;
+}
+
+.content {
+  flex: 1;
+  min-width: 0;
+  padding: 40px 48px;
+}
+
+.pageHeader {
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.pageTitle {
+  font-size: 22px;
+}
+
+.pageSubtitle {
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}

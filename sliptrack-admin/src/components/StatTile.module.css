@@ -1,0 +1,40 @@
+.tile {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.tile::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--accent-bar, var(--accent));
+}
+
+.label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.value {
+  font-family: var(--mono);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.subtitle {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-muted);
+}

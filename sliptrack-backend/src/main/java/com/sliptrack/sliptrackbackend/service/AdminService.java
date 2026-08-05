@@ -1,6 +1,8 @@
 package com.sliptrack.sliptrackbackend.service;
 
+import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminStatsResponse;
+import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminUserResponse;
 import com.sliptrack.sliptrackbackend.model.User;
 import com.sliptrack.sliptrackbackend.repository.PaymentSlipRepository;
@@ -53,6 +55,14 @@ public class AdminService {
                 .totalPaymentSlips(paymentSlipRepository.count())
                 .topCategories(paymentSlipRepository.countGroupedByCategory().stream().limit(5).toList())
                 .build();
+    }
+
+    public List<AdminCategoryCountResponse> getCategoryCounts() {
+        return paymentSlipRepository.countGroupedByCategory();
+    }
+
+    public List<AdminSubCategoryCountResponse> getSubCategoryCounts() {
+        return paymentSlipRepository.countGroupedBySubCategory();
     }
 
     private User findUserOrThrow(Long id) {

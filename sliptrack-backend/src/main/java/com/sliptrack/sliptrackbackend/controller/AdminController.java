@@ -1,6 +1,8 @@
 package com.sliptrack.sliptrackbackend.controller;
 
+import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminStatsResponse;
+import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminUserResponse;
 import com.sliptrack.sliptrackbackend.service.AdminService;
 import lombok.RequiredArgsConstructor;
@@ -36,5 +38,15 @@ public class AdminController {
     @GetMapping("/stats")
     public ResponseEntity<AdminStatsResponse> getStats() {
         return ResponseEntity.ok(adminService.getStats());
+    }
+
+    @GetMapping("/categories/stats")
+    public ResponseEntity<List<AdminCategoryCountResponse>> getCategoryStats() {
+        return ResponseEntity.ok(adminService.getCategoryCounts());
+    }
+
+    @GetMapping("/subcategories/stats")
+    public ResponseEntity<List<AdminSubCategoryCountResponse>> getSubCategoryStats() {
+        return ResponseEntity.ok(adminService.getSubCategoryCounts());
     }
 }

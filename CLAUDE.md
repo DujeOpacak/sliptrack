@@ -21,8 +21,8 @@ Tri zasebna projekta u jednom repozitoriju (privatni GitHub repo `sliptrack`):
 ```
 sliptrack/
   ├── sliptrack-backend/     ← Java 21 / Spring Boot 4.1.0 REST API
-  ├── sliptrack-mobile/      ← React Native (Expo) — u izradi (auth, Property, PaymentSlip ručni unos gotovi)
-  ├── sliptrack-admin/       ← React web admin sučelje — još ne postoji
+  ├── sliptrack-mobile/      ← React Native (Expo) — funkcionalno kompletan (auth, skeniranje, dashboard, podsjetnici); preostaje OCR (Put 2)
+  ├── sliptrack-admin/       ← React web admin sučelje (Vite + TypeScript) — u izradi (auth, Kategorije, Korisnici, Statistika, Pregled gotovi)
   └── docker/                ← docker-compose.yml (PostgreSQL 18 + MinIO)
 ```
 
@@ -32,12 +32,12 @@ sliptrack/
 - **Baza**: PostgreSQL 18 (Docker), db `sliptrack`, user/pass `sliptrack` / `sliptrack123`, port 5432
 - **Object storage**: MinIO (slike uplatnica), konzola na http://localhost:9001, user/pass `sliptrack` / `sliptrack123`, API port 9000
 - **Mobilna app**: React Native + Expo, PDF417 barkod skeniranje (HUB-3 standard) kao primarna metoda, Google ML Kit OCR kao rezerva
-- **Admin**: React (web)
+- **Admin**: React (web), Vite + TypeScript, React Router, axios — bez UI biblioteke (ručno pisan dizajn sustav: tamna tema, oštri rubovi, `CSS Modules`)
 - **Push notifikacije**: Expo Notifications
 
 Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Boot 4.x za `spring-boot-starter-web`) i `spring-boot-starter-data-jpa-test` / `-security-test` / `-webmvc-test` kao test starteri.
 
-## Trenutno stanje (2026-08-01)
+## Trenutno stanje (2026-08-06)
 
 - ✅ `docker-compose.yml` gotov, oba kontejnera rade
 - ✅ Spring Boot projekt kreiran, `application.properties` konfiguriran, spaja se na Postgres bez grešaka
@@ -86,7 +86,19 @@ Napomena: `pom.xml` koristi `spring-boot-starter-webmvc` (novi naziv u Spring Bo
 - ✅ Badge nepročitanih obavijesti na mobileu: `NotificationContext.tsx` (novo, `src/context/`) drži `unreadCount`, osvježava se pri pokretanju app-a i preko `Notifications.addNotificationReceivedListener` (trenutno osvježavanje čim push stigne dok je app otvorena); prikazan kao nativni `tabBarBadge` na Profil tabu (`@react-navigation/bottom-tabs`) i kao broj uz "Obavijesti" gumb na `ProfileScreen`-u; `NotificationListScreen` poziva `refreshUnreadCount()` nakon `markAsRead` da badge odmah padne
 - ✅ Stale `payer_name` stupac u `recurring_patterns` tablici (ostatak od prije preimenovanja u `providerName`; `ddl-auto=update` ne briše/preimenuje stupce, samo dodaje nove) ručno uklonjen (`ALTER TABLE ... DROP COLUMN`) jer je blokirao insert s `NOT NULL` violation
 - ✅ Riješen drugi, iOS-specifičan `DateTimePicker` bug (uzročno različit od ranijeg Android epoch buga) — datum dospijeća se kod uzastopnih skeniranja unutar iste app sesije mogao postaviti samo na 1.1.1970. ili starije (restart app-a privremeno popravljao); JS state (`dueDate`, `today` `useMemo`) ispravno se resetirao pri svakom mountu ekrana, pa je uzrok bio na native razini — React Native reciklirao `UIDatePicker` view umjesto potpunog uništavanja/stvaranja; riješeno dodavanjem `key={route.key}` na oba `DateTimePicker`-a u `PaymentSlipFormScreen` (dospijeće i plaćeno), forsira svjež native view po svakoj instanci ekrana
-- ❌ `sliptrack-admin` nije inicijaliziran
+- ✅ Backend prošireno za `sliptrack-admin` (web klijent) bez ijedne izmjene mobile ugovora — dodatno je, ne zamjena: access token i dalje stiže u JSON body (`AuthResponse`/`TokenResponse`, mobile ga sprema u `SecureStore` kao i prije); refresh token se sad **dodatno** šalje kao `HttpOnly` cookie (`AuthController.setRefreshCookie/clearRefreshCookie`, `SameSite=Strict`, `path=/api/auth`, `secure` gatan preko `app.cookie.secure` property-ja) — mobile ga ignorira (RN axios ne perzistira cookieje), web ga koristi umjesto localStorage; `/auth/refresh`/`/logout` sad primaju token iz cookieja ILI iz bodyja (`RefreshRequest.refreshToken` prestao biti `@NotBlank`) — isti endpoint servisira oba klijenta; `SecurityConfig` dobio `CorsConfigurationSource` bean (`app.cors.allowed-origins`, `allowCredentials(true)`, `exposedHeaders: Set-Cookie`); novi `GET /api/auth/me` (`CurrentUserResponse`) jer JWT nosi samo email — web ga zove nakon tihog cookie-refresha da dohvati ime/prezime/rolu za UI (ruta premještena iz `permitAll` u `anyRequest().authenticated()` popis, za razliku od `register/login/refresh/logout`)
+- ✅ Backend dobio dva nova admin-only endpointa (samo brojevi, bez financijskih podataka — dosljedno CLAUDE.md pravilu): `GET /api/admin/categories/stats` (pun popis kategorija s brojem uplatnica, bez top-5 ograničenja kao `/admin/stats`), `GET /api/admin/subcategories/stats` (isto na razini potkategorije, `categoryId` u svakom retku); nova repository upit metoda `countGroupedBySubCategory()` (JPQL GROUP BY, isti obrazac kao postojeći `countGroupedByCategory()`), `AdminSubCategoryCountResponse` DTO
+- ✅ `sliptrack-admin` inicijaliziran (`npm create vite@latest -- --template react-ts`), `react-router-dom` dodan (pinnan na patched verziju, preostale `npm audit` prijave vežu se uz RSC/SSR mod koji se ne koristi u ovom čisto client-side SPA-u pa su irelevantne)
+- ✅ Dizajn sustav dogovoren s korisnikom prije prve implementacije: tamna/crna tema, oštri rubovi posvuda (`border-radius: 0 !important` globalno u `index.css`), bez "klasičnih AI" boja/ikona — plavi accent (`#2a78d6`, isti kao mobile `colors.primary` radi brand kontinuiteta) kao jedina boja, `good`/`critical` status boje identične mobileu; monospace font (`ui-monospace`) za brand mark, navigacijske labele i brojčane vrijednosti (ledger/terminal estetika); svih ~10 ikona (Dashboard/Kategorije/Korisnici/Statistika/Odjava/Edit/Delete/Plus/Chevron/Sort) ručno crtani angularni SVG-ovi (`strokeLinejoin="miter"`) u `src/components/icons.tsx`, namjerno ne biblioteka ikona
+- ✅ Auth sloj na adminu: `tokenStore.ts` (access token isključivo u memoriji, modulska varijabla, nikad localStorage/sessionStorage — XSS površina realna u browseru za razliku od mobilne app), `client.ts` (axios `withCredentials: true`, isti refresh/retry-na-401 obrazac kao mobile, dijeljen in-flight refresh), `AuthContext.tsx` (tihi bootstrap preko refresh cookieja pri učitavanju stranice → `GET /auth/me` za user info; `role !== 'ADMIN'` na loginu ili bootstrapu odmah briše cookie preko `/auth/logout`, ne pušta USER račun u admin sesiju iako bi cookie tehnički bio valjan)
+- ✅ `AdminLayout` + `Sidebar` (fiksna lijeva navigacija, aktivna stavka = tanka plava lijeva linija) + `PageHeader` (naslov/podnaslov/akcije slot) — ugniježđene rute (`/`, `/categories`, `/users`, `/stats`) iza `ProtectedRoute`
+- ✅ **Kategorije** (`/categories`): expand/collapse redak po kategoriji (potkategorije lazy-loadaju se na prvi expand), CRUD modali za oboje (kategorija: naziv; potkategorija: naziv, `allowsProperty` checkbox, `categoryId` dropdown — podržava premještanje potkategorije u drugu kategoriju), badge "Nekretnina"/"Bez nekretnine"; search preko naziva kategorije ILI potkategorije (dodatni fetch svih potkategorija odjednom samo za search index, odvojeno od lazy per-category liste za prikaz) — pri pretrazi automatski expand-a pogotke; brisanje/greške idu kroz `ConfirmContext`/`ToastContext` (vidi niže), FK `409 Conflict` s backenda prikazan u toastu
+- ✅ **Korisnici** (`/users`): tablica s badge rola/status, aktivacija/deaktivacija po retku (gumb onemogućen na vlastitom računu, zrcali backend `400` pravilo umjesto čekanja greške), search (ime/prezime/email) + filteri (rola, status), **sortiranje klikom na header stupca** (Korisnik/Rola/Status/Registriran, `SortIcon` — dva trokutića, aktivan smjer u accent boji), **izvoz CSV** (poštuje trenutne filtere/sortiranje/pretragu)
+- ✅ **Statistika** (`/stats`): 5 stat tile-ova (ukupno/aktivni/neaktivni korisnici, ukupno uplatnica, prosjek po korisniku — neaktivni i prosjek izvedeni client-side, bez backend izmjene), **"Registracije kroz vrijeme"** (`LineChart.tsx`, vlastita SVG implementacija — kvadratni markeri umjesto krugova radi oštre teme, hover tooltip, period selector 3/6/12/24 mjeseca, kontinuirani niz mjeseci s nulama isto kao mobile dashboard timeline), "Korisnici po roli" i **"Uplatnice po kategoriji"** (`BarChart.tsx` — jedna accent boja za sve barove jer su kategorije nominalne bez prirodnog poretka, "rainbow bar chart" anti-pattern izbjegnut isto kao na mobileu, validirano kroz `dataviz` skill; dropdown "Sve kategorije" vs. konkretna kategorija prebacuje graf na breakdown po njenim potkategorijama, koristi nova `/admin/categories|subcategories/stats` dva endpointa), "Najnovije registracije" (zadnjih 5), izvoz CSV (multi-sekcijski, jedan file sa svih pet blokova)
+- ✅ **Pregled** (`/`, dashboard/home): skraćena verzija statistike (3 stat tile-a), top 3 kategorije kao rang-lista, kartice brzog pristupa na ostala tri ekrana
+- ✅ `ToastContext`/`ConfirmContext` — zamjena za native `alert()`/`confirm()` (izlazili su iz teme): toast stog bottom-right s accent bojom po tipu (error/success/info), auto-dismiss 5s; `confirm()` promise-based hook kroz postojeći `Modal`, `danger` varijanta (crveni gumb) za destruktivne akcije — sve `alert`/`confirm` pozive u Kategorijama i Korisnicima zamijenjeni, uspješne akcije (brisanje, aktivacija/deaktivacija) dodatno potvrđene zelenim toastom
+- ✅ `src/utils/csv.ts` — RFC4180 escapiranje (zarezi/navodnici/newline u poljima), UTF-8 BOM da hrvatska dijakritika ne puca u Excelu; `src/utils/formatDate.ts`, `src/utils/months.ts` (dijeljeni helperi, isti mjesečni skraćeni format "srp 26" kao mobile `DashboardScreen`)
+- ❌ OCR (Put 2 na mobileu, zahtijeva dev build) — jedina preostala planirana mobile funkcionalnost
 
 Package name backend aplikacije: `com.sliptrack.sliptrackbackend` (auto-generiran od Spring Initializr, zadržan kao konačan naziv).
 
@@ -186,16 +198,17 @@ Struja - srpanj 2026       ← description
 
 ## Funkcionalnosti — admin sučelje (ADMIN)
 
-- Upravljanje kategorijama (komunalije, zdravstvo, sport i rekreacija, obrazovanje, kazne i pristojbe, ostalo)
-- Upravljanje korisničkim računima (pregled, deaktivacija)
-- Statistike sustava (broj registriranih/aktivnih korisnika, broj skeniranih uplatnica, najpopularnije kategorije)
-- Admin **nema** pristup financijskim podacima korisnika
+- ✅ Upravljanje kategorijama i potkategorijama (CRUD, `allowsProperty` flag, search)
+- ✅ Upravljanje korisničkim računima (pregled, aktivacija/deaktivacija, search/filter/sort, izvoz CSV)
+- ✅ Statistike sustava (broj registriranih/aktivnih/neaktivnih korisnika, broj uplatnica, uplatnice po kategoriji/potkategoriji s filterom, registracije kroz vrijeme, izvoz CSV)
+- Admin **nema** pristup financijskim podacima korisnika — potvrđeno kroz sve implementirane admin endpointe (samo brojevi, nikad iznosi)
 
 ## Sigurnost
 
 - JWT autentifikacija implementirana: access token (15 min, `jwt.access-token-expiration-ms`) + refresh token (30 dana, `jwt.refresh-token-expiration-ms`, hashiran SHA-256 u tablici `refresh_tokens`, rotira se pri svakom refreshu)
 - `jwt.secret` trenutno hardkodiran u `application.properties` (commita se u git) — prihvatljivo za sada, razmotriti premještanje u `application-local.properties` (već u `.gitignore`) prije javnog objavljivanja repozitorija
-- Endpointi: `POST /api/auth/register`, `/login`, `/refresh`, `/logout` — javno dostupni (`permitAll`), sve ostalo zahtijeva autentikaciju
+- Endpointi: `POST /api/auth/register`, `/login`, `/refresh`, `/logout` — javno dostupni (`permitAll`), sve ostalo zahtijeva autentikaciju (uklj. `GET /api/auth/me`, iako je pod `/api/auth/**` prefiksom — namjerno izvan permitAll liste, vidi niže)
+- **Web (sliptrack-admin) vs mobile auth**: oba klijenta koriste iste `/api/auth/*` rute, ali različit dio odgovora — mobile access+refresh token čita iz JSON bodyja (`SecureStore`), web access token čita iz istog bodyja ali drži ga samo u memoriji (nikad storage), a refresh token web uopće ne čita iz bodyja nego iz `HttpOnly` cookieja koji backend šalje na `login`/`register`/`refresh` (`SameSite=Strict`, `path=/api/auth`, `secure` preko `app.cookie.secure` property-ja — `false` u dev-u, na `true` prije produkcije). `/refresh` i `/logout` prihvaćaju token iz cookieja ILI bodyja (cookie ima prednost) — isti endpoint, bez grananja po klijentu. CORS (`app.cors.allowed-origins`, zadano `http://localhost:5173`) i `allowCredentials(true)` potrebni da browser uopće prihvati cross-origin cookie razmjenu.
 - Napomena: `/error` mora biti u `permitAll` listi — servlet kontejner interno preusmjerava neuhvaćene HTTP greške (npr. `ResponseStatusException`) na `/error`, koji inače prolazi kroz Security filter i vraća pogrešan `403` umjesto stvarnog statusa
 - Dvije uloge: USER, ADMIN
 - Svaki korisnik vidi samo svoje uplatnice
@@ -301,6 +314,8 @@ Grubi plan, regulirati po potrebi tijekom implementacije. "Vlasnik"/"samo svoje"
 | PATCH | `/api/admin/users/{id}/deactivate` | Deaktivacija korisnika | ADMIN |
 | PATCH | `/api/admin/users/{id}/activate` | Reaktivacija korisnika | ADMIN |
 | GET | `/api/admin/stats` | Statistike sustava (broj korisnika, broj skeniranih uplatnica, top kategorije) | ADMIN |
+| GET | `/api/admin/categories/stats` | Broj uplatnica po kategoriji, pun popis (bez top-5 ograničenja) | ADMIN |
+| GET | `/api/admin/subcategories/stats` | Broj uplatnica po potkategoriji (svaki redak nosi `categoryId`) | ADMIN |
 
 Napomene:
 - `RecurringPattern` nema vlastiti REST endpoint — puni ga interni `@Scheduled` job, nije nešto što klijent CRUD-a direktno.
@@ -334,7 +349,15 @@ Napomene:
    - ✅ `UserDevice` registracija na mobileu (testirano na iOS, poznato Android/Expo Go ograničenje), `Notification` inbox ekran, filteri na listi uplatnica (status/kategorija/potkategorija/nekretnina/godina/mjesec dospijeća), `SelectField` komponenta (zamjena za Picker), redizajn grafa "Troškovi kroz vrijeme" (Y/X os, filter razdoblja, tooltip)
    - ❌ OCR (Put 2, zahtijeva dev build)
 7. ✅ Automatski podsjetnici — `@Scheduled` job (analiza `RecurringPattern`, upis `Notification`, slanje push kroz Expo Notifications API) — implementirano i testirano end-to-end; 4 slučaja (uskoro dospijeva/danas dospijeva/dospjelo neplaćeno/predikcija), badge nepročitanih obavijesti na mobileu (tab bar + Profil)
-8. React admin sučelje
+8. **React admin sučelje** — u izradi, backend prošireno (cookie-based web auth uz postojeći mobile JSON-body flow, `/auth/me`, admin category/subcategory stats endpointi)
+   - ✅ Vite init (React + TypeScript), dizajn sustav (tamna tema, oštri rubovi, ručno crtane ikone)
+   - ✅ Auth (cookie refresh + in-memory access token, role gate na ADMIN)
+   - ✅ Layout (Sidebar/AdminLayout/PageHeader), routing
+   - ✅ Kategorije (CRUD, expand/collapse, search)
+   - ✅ Korisnici (aktivacija/deaktivacija, search/filter/sort, CSV export)
+   - ✅ Statistika (stat tileovi, registracije kroz vrijeme, uplatnice po kategoriji/potkategoriji, CSV export)
+   - ✅ Pregled/Dashboard (skraćena statistika + brzi linkovi)
+   - ✅ Toast/Confirm sustav (zamjena native browser dijaloga)
 9. Testiranje
 
 ## Pokretanje lokalno

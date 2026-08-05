@@ -1,6 +1,7 @@
 package com.sliptrack.sliptrackbackend.repository;
 
 import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
+import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.ProviderAmountResponse;
 import com.sliptrack.sliptrackbackend.enums.PaymentStatus;
@@ -88,4 +89,14 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
             ORDER BY COUNT(p) DESC
             """)
     List<AdminCategoryCountResponse> countGroupedByCategory();
+
+    @Query("""
+            SELECT new com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse(
+                p.subCategory.id, p.subCategory.name, p.category.id, COUNT(p))
+            FROM PaymentSlip p
+            WHERE p.subCategory IS NOT NULL
+            GROUP BY p.subCategory.id, p.subCategory.name, p.category.id
+            ORDER BY COUNT(p) DESC
+            """)
+    List<AdminSubCategoryCountResponse> countGroupedBySubCategory();
 }

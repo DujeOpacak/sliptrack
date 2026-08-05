@@ -392,3 +392,60 @@ Sutra
 
 sliptrack-admin (React web sučelje) — inicijalizacija projekta, upravljanje kategorijama/potkategorijama, korisnicima, statistike
 Ili OCR (Put 2, zahtijeva development build), ovisno o dogovoru
+
+05.08.2026. — Dan 9 — Cookie-based web auth na backendu, sliptrack-admin init, Kategorije/Korisnici/Statistika/Pregled
+
+Što je napravljeno
+
+Odlučeno da sliptrack-admin ide sljedeći (ne OCR) — mobile je funkcionalno gotov, admin je preostali veliki dio rada iz obrazloženja teme
+Istražen referentni projekt (drugi korisnikov projekt, hnl-rate/OICAR) radi usporedbe auth prakse na webu — potvrđeno da je access token u memoriji (nikad localStorage) + refresh token kao HttpOnly cookie trenutni best-practice za SPA, za razliku od mobilne app gdje je SecureStore ispravan izbor jer XSS rizik ne postoji u nativnom kontekstu
+Isplaniran (Plan mode) i implementiran cookie-based refresh flow na sliptrack-backend, additivno uz postojeći mobile JSON-body ugovor, bez ijedne izmjene mobile koda: AuthController.setRefreshCookie()/clearRefreshCookie() (HttpOnly, SameSite=Strict, path=/api/auth, secure preko nove app.cookie.secure property), /refresh i /logout sad prihvaćaju token iz cookieja ILI bodyja (RefreshRequest.refreshToken prestao biti @NotBlank), CorsConfigurationSource bean u SecurityConfig (app.cors.allowed-origins, allowCredentials(true), exposedHeaders: Set-Cookie)
+Otkriveno tijekom implementacije (ne u planu) da JWT nosi samo email kao subject — web treba ime/prezime/rolu za UI nakon tihog cookie-refresha na učitavanju stranice, pa dodan novi GET /api/auth/me (CurrentUserResponse, CurrentUserService ponovno iskorišten); ruta eksplicitno izbačena iz permitAll liste (koja je suzena s wildcard /api/auth/** na eksplicitne register/login/refresh/logout rute) da ne baci NPE na neautenticiran poziv nego čist 401
+Regresijski test na fizičkom uređaju kroz Expo Go (login/refresh/logout) potvrdio da mobile flow radi identično kao prije — cookie promjene su čisto additivne
+sliptrack-admin inicijaliziran: npm create vite@latest -- --template react-ts, react-router-dom dodan (pinnan na patched verziju zbog npm audit prijava vezanih uz React Router RSC/SSR mod — irelevantno za čisti client-side SPA bez SSR-a)
+Prije prve implementacije dogovoren dizajn sustav s korisnikom: tamna/crna tema, oštri rubovi posvuda (bez zaobljenih kutova), izričito bez "klasičnih AI" boja (ljubičasta/indigo gradijenti) ili generičkih ikona biblioteka — plavi accent (#2a78d6, isti kao mobile radi brand kontinuiteta), monospace font za brand mark/navigaciju/brojke (ledger/terminal estetika, tematski konzistentno s "uplatnica" domenom)
+src/index.css: CSS custom properties tema, globalni border-radius: 0 !important reset, .btn/.field/.toolbar utility klase dijeljene kroz cijelu app
+src/components/icons.tsx: svih ~10 ikona (Dashboard/Kategorije/Korisnici/Statistika/Odjava/Edit/Delete/Plus/Chevron) ručno crtani kao angularni SVG (strokeLinejoin="miter", strokeLinecap="square") umjesto biblioteke ikona
+Auth sloj: tokenStore.ts (modulska varijabla, access token isključivo u memoriji), client.ts (axios withCredentials: true, isti refresh/retry-na-401 obrazac kao mobile client.ts, dijeljen in-flight refresh), AuthContext.tsx (tihi bootstrap preko refresh cookieja pri mountu — poziva /auth/refresh pa /auth/me; role !== 'ADMIN' na loginu ili bootstrapu odmah zove /auth/logout da obriše cookie, spriječava da USER račun tiho dobije admin sesiju preko cookieja)
+AdminLayout/Sidebar/PageHeader implementirani — ugniježđene rute (/, /categories, /users, /stats) iza ProtectedRoute
+Implementirana Kategorije stranica (/categories): expand/collapse redak po kategoriji (potkategorije lazy-loadaju se pri prvom expandu), CRUD modali (Category: naziv; SubCategory: naziv, allowsProperty checkbox, categoryId dropdown — podržava premještanje potkategorije u drugu kategoriju), badge "Nekretnina"/"Bez nekretnine"
+Implementirana Korisnici stranica (/users): tablica s badge rola/status, aktivacija/deaktivacija po retku preko PATCH /admin/users/{id}/activate|deactivate — gumb onemogućen na vlastitom računu (title tooltip objašnjava zašto), zrcali backend pravilo da admin ne može sam sebe deaktivirati umjesto čekanja 400 greške
+Implementirana Statistika stranica (/stats): 5 stat tileova (ukupno/aktivni/neaktivni korisnici, ukupno uplatnica, prosjek po korisniku — potonja dva izvedena client-side iz postojećih brojki, bez backend izmjene), "Korisnici po roli" (BarChart, ADMIN/USER breakdown izveden iz već fetchane liste korisnika), "Najnovije registracije" (zadnjih 5 po createdAt), "Najpopularnije kategorije" (BarChart, top 5 iz postojećeg /admin/stats)
+Prije pisanja grafova pozvan dataviz skill — primijenjeno isto pravilo kao na mobileu: kategorije su nominalne bez prirodnog poretka pa sve trake nose istu accent boju ("rainbow bar chart" anti-pattern izbjegnut), bez zaobljenih krajeva bara (korisnikov eksplicitni zahtjev za oštre rubove nadjačava skillov default prijedlog zaobljenih data-end-ova)
+Implementirana Pregled/Dashboard stranica (/, home): skraćena statistika (3 stat tilea), top 3 kategorije kao rang-lista, kartice brzog pristupa (linkovi) na ostala tri ekrana
+Nakon svake implementirane stranice: tsc --noEmit + npm run build (tsc -b && vite build) provjereni čisti prije javljanja korisniku; dev server (npm run dev) pokretan/gašen preko taskkill /F /IM node.exe između iteracija (napomenuto korisniku da to ubija SVE node procese na sustavu, uklj. eventualni Expo/Metro bundler)
+
+Problemi i rješenja
+
+Beskonačni loading spinner na mobile loginu pri povratku na projekt (nova sesija) — uzrok identičan ranijem slučaju iz Dana 6, LAN IP računala se promijenio (mreža/restart), config.ts na mobileu i minio.endpoint u application.properties oba ažurirana na novi IP
+npm audit prijavljivao "high severity" na react-router u krug (svaka verzija unutar 6.x-8.x raspona ima neku CVE prijavu) — sve se odnose na RSC Mode/SSR funkcionalnosti (CSRF bypass, streaming redirect XSS) koje se ne koriste u čistom client-side Vite SPA-u bez servera; procijenjeno irelevantnim, nije dalje gonjeno
+Zaboravljen axios u package.json pri prvom pokretanju dev servera (uveden u kod prije npm install axios) — Vite prijavio "Failed to run dependency scan"; riješeno instalacijom
+JWT ne nosi ime/prezime/rolu (samo email kao subject) — otkriveno tek pri pisanju AuthContext bootstrap logike, ne u planu; riješeno novim GET /api/auth/me endpointom
+
+Sutra
+
+Toast/Confirm sustav (zamjena native alert/confirm dijaloga koji izlaze iz teme), izvoz CSV, sortiranje tablice korisnika, filtriranje uplatnica po kategoriji/potkategoriji — redoslijed po dogovoru s korisnikom tijekom sesije
+
+06.08.2026. — Dan 10 — Toast/Confirm sustav, CSV export, sortiranje, filtriranje po kategoriji/potkategoriji
+
+Što je napravljeno
+
+Korisnik pitao što bi još bilo korisno na adminu — predloženo (i odabrano) da se prvo zamijene native browser alert()/confirm() dijalozi (jedini preostali element koji je vizualno izvan dogovorene tamne/oštre teme) prije dodavanja novih funkcionalnosti
+Implementiran ToastContext (src/context/): stog notifikacija bottom-right, tanka accent traka lijevo po tipu (error=critical/success=good/info=accent), auto-dismiss 5s, ručno zatvaranje
+Implementiran ConfirmContext (src/context/): promise-based confirm(message, options) hook, renderira se kroz postojeću Modal komponentu, opcije title/confirmLabel/danger (crveni .btn-danger za destruktivne akcije, nova klasa u index.css)
+Svi alert()/confirm() pozivi u CategoriesPage i UsersPage zamijenjeni — brisanje kategorije/potkategorije i deaktivacija korisnika sad idu kroz temirani confirm dijalog s jasnim naslovom; uspješne akcije (brisanje, aktivacija/deaktivacija) dodatno potvrđene zelenim toastom
+Implementiran izvoz CSV na Korisnicima (gumb u PageHeader, izvozi trenutno filtriranu listu) i Statistici (multi-sekcijski CSV — sažetak, korisnici po roli, registracije kroz vrijeme, najnovije registracije, uplatnice po kategoriji, sve u jednom fileu s praznim redom kao separatorom); src/utils/csv.ts s RFC4180 escapiranjem (zarezi/navodnici/newline u poljima) i UTF-8 BOM da hrvatska dijakritika (č/ć/š/ž) ne puca u Excelu
+Implementirano sortiranje tablice korisnika klikom na header stupca (Korisnik/Rola/Status/Registriran) — ponovni klik obrće smjer, SortIcon (dva trokutića, aktivan smjer u accent boji) dodan u icons.tsx; zadano sortiranje najnoviji-prvi (createdAt desc); CSV export ažuriran da izvozi točno prikazanim redoslijedom
+Korisnik predložio filtriranje broja uplatnica po kategoriji/potkategoriji na Statistici — protumačeno kao potpun (ne top-5) pregled s mogućnošću biranja kategorije, ne samo statički graf
+Backend prošireno (samo brojevi, bez financijskih podataka — dosljedno postojećem CLAUDE.md pravilu): AdminSubCategoryCountResponse DTO, PaymentSlipRepository.countGroupedBySubCategory() (JPQL GROUP BY po subCategory, isti obrazac kao postojeći countGroupedByCategory(), isključuje NULL subCategory), AdminService.getCategoryCounts()/getSubCategoryCounts() (bez top-5 ograničenja za razliku od postojećeg getStats()), dva nova endpointa GET /api/admin/categories/stats i /api/admin/subcategories/stats
+Implementirana sekcija "Uplatnice po kategoriji" na Statistici — dropdown "Sve kategorije" (puni BarChart svih kategorija, ne top 5 kao ranije) ili konkretna kategorija (BarChart njenih potkategorija + ukupan broj uplatnica u toj kategoriji); zamijenila staru statičku "Najpopularnije kategorije" sekciju jer je nova funkcionalno nadskup (Dashboard/Pregled zadržao svoj kratki top-3 prikaz, nedirnut)
+Nakon svake promjene: tsc --noEmit + npm run build provjereni čisti, dev server restartan za ručno testiranje korisniku
+Korisnik zatražio update CLAUDE.md i DEVLOG.md da odražavaju trenutno stanje projekta nakon cijele admin sesije (Dan 9 + Dan 10)
+
+Problemi i rješenja
+
+Nije bilo pravih bugova u ovoj sesiji — sve su nove funkcionalnosti nadograđene na već postojeće obrasce (Toast/Confirm, CSV, sort, filter)
+
+Sutra
+
+Nastaviti sliptrack-admin po potrebi (dodatne funkcionalnosti po dogovoru) ili prijeći na OCR (Put 2, mobile) / pisanje samog rada, ovisno o prioritetu
