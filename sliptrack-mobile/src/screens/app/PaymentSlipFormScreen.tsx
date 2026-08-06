@@ -16,7 +16,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as ImagePicker from "expo-image-picker";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
-import type { AppStackParamList } from "../../navigation/types";
+import type { AppStackParamList, PickedImage } from "../../navigation/types";
 import { paymentSlipApi } from "../../api/paymentSlipApi";
 import { categoryApi } from "../../api/categoryApi";
 import { propertyApi } from "../../api/propertyApi";
@@ -25,12 +25,6 @@ import type { Property } from "../../types/property";
 import type { PaymentStatus } from "../../types/paymentSlip";
 import { colors } from "../../theme/colors";
 import SelectField from "../../components/SelectField";
-
-interface PickedImage {
-  uri: string;
-  mimeType?: string;
-  fileName?: string;
-}
 
 type Props = NativeStackScreenProps<AppStackParamList, "PaymentSlipForm">;
 
@@ -50,8 +44,13 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     route.params && "scannedData" in route.params
       ? route.params.scannedData
       : undefined;
+  const ocrData =
+    route.params && "ocrData" in route.params ? route.params.ocrData : undefined;
+  const ocrSourceImage =
+    route.params && "sourceImage" in route.params ? route.params.sourceImage : undefined;
   const isEditing = paymentSlipId !== undefined;
-  const wasScanned = scannedData !== undefined;
+  const wasScanned = scannedData !== undefined || ocrData !== undefined;
+  const wasOcrScanned = ocrData !== undefined;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -124,6 +123,16 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         setPaymentModel(scannedData.paymentModel ?? "");
         setProviderName(scannedData.providerName ?? "");
         setDescription(scannedData.description ?? "");
+      } else if (ocrData) {
+        setIban(ocrData.iban ?? "");
+        setAmount(ocrData.amount !== undefined ? String(ocrData.amount) : "");
+        setReferenceNumber(ocrData.referenceNumber ?? "");
+        setPaymentModel(ocrData.paymentModel ?? "");
+        // OCR fotografija uplatnice je već snimljena za prepoznavanje teksta —
+        // reusea se izravno kao slika uplatnice, korisnik je ne treba birati opet.
+        if (ocrSourceImage) {
+          setPickedImage(ocrSourceImage);
+        }
       }
       setIsLoading(false);
     })();
@@ -333,7 +342,9 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       {wasScanned && !isEditing && (
         <View style={styles.scanBanner}>
           <Text style={styles.scanBannerText}>
-            Podaci popunjeni skeniranjem — provjeri prije spremanja.
+            {wasOcrScanned
+              ? "Podaci prepoznati OCR-om — manje pouzdano od barkoda, pažljivo provjeri prije spremanja."
+              : "Podaci popunjeni skeniranjem — provjeri prije spremanja."}
           </Text>
         </View>
       )}

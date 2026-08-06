@@ -449,3 +449,64 @@ Nije bilo pravih bugova u ovoj sesiji — sve su nove funkcionalnosti nadograđe
 Sutra
 
 Nastaviti sliptrack-admin po potrebi (dodatne funkcionalnosti po dogovoru) ili prijeći na OCR (Put 2, mobile) / pisanje samog rada, ovisno o prioritetu
+
+06.08.2026. — Dan 10, nastavak — Android development build setup, otkriven FCM credentials problem
+
+Što je napravljeno
+
+Korisnik pitao što je OCR implementacija (kompleksnost), što je "dev build" i kako testirati Android bez fizičkog uređaja — objašnjeno: Expo Go je gotova ljuska s fiksnim skupom native modula (ne uključuje ML Kit), development build je vlastita kompajlirana verzija s točno potrebnim native modulima; preporučen Android Studio + AVD emulator kao lokalno besplatno rješenje
+Korisnik pokrenuo npx expo run:android — pao na "SDK location not found" (ANDROID_HOME nije postavljen kao env varijabla, iako je Android SDK instaliran na standardnoj lokaciji %LOCALAPPDATA%\Android\Sdk)
+Riješeno kreiranjem android/local.properties (sdk.dir=C:/Users/User/AppData/Local/Android/Sdk) — projekt-specifično, ne dira sistemske env varijable; potvrđeno da je android/local.properties (cijeli android/ folder) već u .gitignore, sigurno ga je kreirati direktno bez brige o zagađenju repozitorija; korisnik izričito odabrao da se ANDROID_HOME ne postavlja trajno na sustavu (samo local.properties fix)
+Nakon fixa, npx expo run:android uspješno izgradio i instalirao dev build na Android emulator — prvi put da app radi izvan Expo Go
+Korisnik prijavio login na emulatoru, provjerio bazu — user_devices tablica prazna, push registracija tiho nije uspjela (registerDeviceForPush u AuthContext.tsx ima try/catch koji guta grešku bez logiranja, po dizajnu "best-effort, ne smije blokirati login")
+Privremeno dodan console.warn(err) u catch blok (AuthContext.tsx, označen TODO komentarom za uklanjanje) da se otkrije stvarni uzrok — korisnik reproducirao, error: "Default FirebaseApp is not initialized ... Make sure to call FirebaseApp.initializeApp(Context) first" s linkom na https://docs.expo.dev/push-notifications/fcm-credentials/
+Zaključeno da poznato ograničenje iz CLAUDE.md ("Android push ne radi u Expo Go") nije bilo cijela slika — Android push od nedavno zahtijeva vlastiti Firebase (FCM V1) projekt neovisno o Expo Go/dev build razlici, jer je Google ugasio stari legacy FCM API na koji se Expo push servis ranije oslanjao bez potrebe za vlastitim Firebase projektom
+Objašnjena dva odvojena koraka potrebna za rješenje: (A) klijentska strana — google-services.json (iz Firebase Console, Android app s package name com.dujeopacak.sliptrackmobile) treba u projekt da se Firebase SDK uopće inicijalizira na uređaju (rješava ovu točnu grešku), zahtijeva ponovni native build (expo prebuild --clean + expo run:android); (B) serverska strana — eas credentials (EAS CLI, zahtijeva Expo/EAS account login) za upload FCM V1 service account key-a da Expo-ovi serveri mogu stvarno isporučiti notifikaciju
+Korak (A)/Firebase Console kreiranje projekta mora napraviti korisnik sam u browseru (Google account login) — odgođeno do sutra
+
+Problemi i rješenja
+
+SDK location not found pri prvom npx expo run:android — riješeno android/local.properties (sdk.dir), bez sistemske env varijable
+Android push registracija tiho ne uspijeva čak i u dev buildu (ne samo Expo Go kako je ranije pretpostavljeno) — pravi uzrok otkriven tek nakon privremenog console.warn u AuthContext.tsx catch bloku: nedostaje Firebase projekt (google-services.json + FCM V1 service account), ne Expo Go ograničenje kao takvo; CLAUDE.md napomena o ovome treba se ažurirati/proširiti sutra
+
+Sutra
+
+Firebase Console — kreirati projekt, dodati Android app (com.dujeopacak.sliptrackmobile), preuzeti google-services.json → ožičiti u app.json (googleServicesFile) + expo prebuild --clean
+eas credentials — upload FCM V1 service account za serversku isporuku push notifikacija
+
+07.08.2026. — Dan 11 — OCR (Put 2) implementiran i testiran, mobile funkcionalno kompletan
+
+Što je napravljeno
+
+Korisnik zatražio nastavak na OCR (Put 2, jedina preostala planirana mobile funkcionalnost) — prije implementacije razjašnjena dva otvorena pitanja iz prethodne sesije: development build je potreban jer ML Kit/Vision OCR biblioteke nisu u fiksnom skupu native modula koje Expo Go bundla (isto obrazloženje kao ranije za ostale native module), i to neovisno o platformi
+Razjašnjeno korisnikovo pitanje o iOS fizičkom testiranju bez plaćenog Apple Developer Programa: nemoguće bez njega u oba slučaja — lokalni build (npx expo run:ios) zahtijeva Xcode/Mac (korisnik na Windowsu), a EAS cloud build i dalje mora ad-hoc potpisati build za instalaciju na uređaj preko registriranog UDID-a, što Apple dopušta isključivo plaćenim Program članovima (besplatan Apple ID daje samo 7-dnevno lokalno "personal team" potpisivanje, opet uz Mac); dogovoreno da se iOS grana koda piše/kompajlira, fizička verifikacija ostaje odgođena do kupnje računa
+Razjašnjeno korisnikovo pitanje o Android testiranju bez fizičkog uređaja: Android Studio emulator dovoljan, dvije opcije objašnjene — AVD webcam passthrough (Camera → Webcam0 u AVD konfiguraciji, za "uživo" kameru) ili jednostavniji drag-and-drop slike izravno na prozor emulatora (ide u Downloads/galeriju, dostupno kroz expo-image-picker) — potonje odabrano kao dovoljno jer OCR ionako ne treba biti live-scan (vidi niže)
+Korisnik potvrdio (na pitanje) da projektni obrazac/rad ne propisuje OCR kao live-scan ograničenje — odlučeno (preporuka, korisnik prihvatio) da OCR bude foto/galerija umjesto live-scan: expo-text-extractor (i ML Kit/Vision generalno) radi nad jednom statičnom slikom, ne video streamom, pa live-frame-capture ne bi donio tehničku korist, samo složenost; usto reusea već testirani expo-image-picker obrazac iz uploada fotografije uplatnice
+Istražene biblioteke (WebSearch): expo-text-extractor (pchalupa/expo-text-extractor, v2.0.0) odabran — ML Kit na Androidu, Apple Vision na iOSu, jedan paket za oba OS-a, API extractTextFromImage(uri): Promise<string[]>, podržava SDK 52+ (mi na 54), potvrđeno podržava i Android/iOS emulator (ne samo fizički uređaj); provjereno u node_modules (expo-module.config.json, nema app.plugin.js) da ne treba config plugin entry u app.json — čist autolink modul
+Implementacija (redoslijed): npx expo install expo-text-extractor → src/utils/parseOcrText.ts (heuristički regex parser, vidi niže) → src/screens/app/OcrScanScreen.tsx (Kamera/Galerija izbor, loading state, extractTextFromImage, parse, navigacija na PaymentSlipForm s ocrData + sourceImage; isSupported provjera s fallback porukom; Alert "Ručni unos"/"Pokušaj ponovno" na neuspjeh, isti obrazac kao ScanScreen) → navigation/types.ts (nova OcrScanPaymentSlip ruta, PaymentSlipForm union proširen s { ocrData, sourceImage }, PickedImage sučelje premješteno iz lokalne definicije u PaymentSlipFormScreen.tsx u dijeljeni types.ts) → RootNavigator.tsx (registracija ekrana) → AddChoiceScreen.tsx (treća opcija "OCR fotografija") → PaymentSlipFormScreen.tsx (prefill iz ocrData, wasScanned prošireno na scannedData || ocrData, auto-attach sourceImage kao pickedImage, banner tekst grana po izvoru — OCR poruka eksplicitno upozorava na nižu pouzdanost)
+parseOcrText.ts: IBAN regex tolerantan na razmake koje OCR ubaci između znamenki (HR[ \t]?\d{2}(?:[ \t]?\d){17}); model plaćanja razlikovan od početka IBAN-a negativnim lookaheadom (?!\d) — IBAN se prvo pronađe i ukloni iz teksta prije traženja modela da se izbjegne krivi match; iznos hrvatski format (1.234,56 → 1234.56); providerName/description namjerno NE izvučeni heuristikom (nepouzdano bez labela na slici), korisnik ih upisuje ručno
+Odlučeno (bonus prijedlog, korisnik prihvatio) da se fotografija odabrana za OCR automatski koristi kao slika uplatnice — korisnik je nju ionako već fotografirao/odabrao za prepoznavanje teksta, nema smisla tražiti je opet za upload
+tsc --noEmit čist nakon svih izmjena
+npx expo prebuild --clean --platform android + npx expo run:android za rebuild dev clienta s novim native modulom — build i instalacija na Android Studio emulatoru uspješni
+Korisnik testirao OCR flow na emulatoru s dvije stvarne uplatnice (drag-and-drop slika u galeriju emulatora) — potvrdio da radi end-to-end (foto → prepoznavanje → pred-popunjena forma s bannerom → spremanje), uz očekivano nižu točnost prepoznavanja pojedinih polja na nekim uplatnicama — prihvaćeno kao poznato ograničenje OCR-a (zato postoji ekran za potvrdu/ispravak, ne bug)
+CLAUDE.md i DEVLOG.md ažurirani da odražavaju gotov OCR — mobile je time funkcionalno kompletan (auth, Property/PaymentSlip CRUD, dashboard, skeniranje uklj. OCR, podsjetnici, notifikacije); usput ispravljena zastarjela napomena u "Plan implementacije skeniranja" (otvoreno pitanje o scannedAt/wasScanned bilo je već riješeno prije nekoliko sesija, dokument to nije odražavao)
+
+Problemi i rješenja
+
+npx expo prebuild --clean obrisao android/local.properties (očekivano, poznat gotcha iz Dana 10 — cijeli android/ folder se regenerira) — ponovno kreiran (sdk.dir=...) prije rebuilda, isto rješenje kao ranije
+Metro bundler proces (port 8081) iz prvog npx expo run:android pokretanja ugašen na korisnikov zahtjev jer je htio sam ponovno pokrenuti build
+
+Sutra
+
+Android push (FCM V1 Firebase projekt) — još neriješeno iz Dana 10, čeka korisnika da otvori Firebase Console projekt
+iOS fizičko testiranje (OCR i ostalo native) — čeka kupnju Apple Developer Program računa
+Nakon toga: preostaju samo manje dorade po dogovoru ili prelazak na pisanje samog rada, s obzirom da su i mobile i admin funkcionalno kompletni
+Ukloniti privremeni console.warn iz AuthContext.tsx nakon što se potvrdi da push radi
+
+Dodatak — provjera na fizičkom iOS uređaju i odluka o Apple Developer računu
+
+Korisnik pokrenuo npx expo start i skenirao QR kod na fizičkom iOS uređaju — otvorilo se u Expo Go (ne custom dev build), baca grešku vezanu za OCR modul; potvrđeno da je to očekivano ponašanje, ne bug — Expo Go ima fiksan skup native modula koji ne uključuje expo-text-extractor, isto obrazloženje kao za ostale native module (ML Kit, itd.), potvrđuje raniji zaključak da fizičko iOS testiranje custom native koda nije moguće bez dev builda
+Korisnik pitao savjet oko kupnje Apple Developer Programa ($99/god) — preporučeno da kupi: rad tvrdi cross-platform podršku pa vrijedi barem jednom potvrditi da OCR i ostali native dijelovi rade na iOS-u za obranu, račun je svejedno potreban za bilo kakvu distribuciju izvan dev builda (TestFlight/App Store)
+Objašnjeno korisniku kako Apple Developer Program funkcionira u praksi: (1) development/ad-hoc distribucija — registracija UDID-a uređaja (eas device:create) + EAS build potpisan za taj uređaj, ovo je jedino što treba za fizičko testiranje, bez ikakvog Apple pregleda; (2) TestFlight — beta distribucija do 10.000 testera, laganija "beta app review"; (3) puna App Store objava — App Store Connect listing, pun Apple review proces, javno dostupno; za trenutni cilj (testiranje OCR-a) dovoljan je samo korak (1)
+Na korisnikovo pitanje objašnjeni puni zahtjevi za App Store objavu (informativno, nije još odlučeno hoće li se ići na taj korak): pravni preduvjeti (Individual Apple Developer Program dovoljan, Organization zahtijeva D-U-N-S broj), tehnički (bundle identifier već postoji, ikone/launch screen, Info.plist usage description stringovi već pokriveni kroz postojeće app.json pluginove, backend mora biti javno dostupan preko HTTPS-a umjesto trenutnog localhost/LAN IP dev setupa, export compliance upitnik), App Store Connect listing (screenshotovi, opis, privacy policy URL — obavezan s obzirom da app pohranjuje financijske podatke poput IBAN-a, App Privacy "nutrition label"), i App Review Guidelines (reviewer treba demo/test korisnički račun, sigurnost pohrane/prijenosa podataka pod povećanim nadzorom zbog financijske prirode podataka)
+Korisnik odgodio konačnu odluku o kupnji računa do sutra

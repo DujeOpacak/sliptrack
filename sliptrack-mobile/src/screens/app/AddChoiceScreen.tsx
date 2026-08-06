@@ -19,6 +19,14 @@ export default function AddChoiceScreen({ navigation }: Props) {
       </Pressable>
       <Pressable
         style={styles.option}
+        onPress={() => navigation.replace("OcrScanPaymentSlip")}
+      >
+        <Ionicons name="camera-outline" size={40} color={colors.primary} />
+        <Text style={styles.optionTitle}>OCR fotografija</Text>
+        <Text style={styles.optionSubtitle}>Kad barkod ne postoji ili ne radi</Text>
+      </Pressable>
+      <Pressable
+        style={styles.option}
         onPress={() => navigation.replace("PaymentSlipForm", undefined)}
       >
         <Ionicons name="create-outline" size={40} color={colors.primary} />

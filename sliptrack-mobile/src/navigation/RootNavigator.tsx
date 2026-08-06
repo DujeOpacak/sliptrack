@@ -11,6 +11,7 @@ import PropertyFormScreen from "../screens/app/PropertyFormScreen";
 import PaymentSlipFormScreen from "../screens/app/PaymentSlipFormScreen";
 import AddChoiceScreen from "../screens/app/AddChoiceScreen";
 import ScanScreen from "../screens/app/ScanScreen";
+import OcrScanScreen from "../screens/app/OcrScanScreen";
 import NotificationListScreen from "../screens/app/NotificationListScreen";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
@@ -51,6 +52,11 @@ function AppNavigatorStack() {
         name="ScanPaymentSlip"
         component={ScanScreen}
         options={{ title: "Skeniranje", presentation: "modal" }}
+      />
+      <AppStack.Screen
+        name="OcrScanPaymentSlip"
+        component={OcrScanScreen}
+        options={{ title: "OCR skeniranje", presentation: "modal" }}
       />
       <AppStack.Screen
         name="PropertyForm"
