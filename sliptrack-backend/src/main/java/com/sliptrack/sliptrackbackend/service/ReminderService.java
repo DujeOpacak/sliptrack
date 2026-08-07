@@ -111,8 +111,8 @@ public class ReminderService {
                 continue;
             }
 
-            boolean alreadyTracked = paymentSlipRepository.existsByUserIdAndProviderNameAndStatusAndDueDateBetween(
-                    pattern.getUser().getId(), pattern.getProviderName(), PaymentStatus.UNPAID,
+            boolean alreadyTracked = paymentSlipRepository.existsByUserIdAndProviderNameAndDueDateBetween(
+                    pattern.getUser().getId(), pattern.getProviderName(),
                     targetMonth.atDay(1), targetMonth.atEndOfMonth());
             if (alreadyTracked) {
                 continue;

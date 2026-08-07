@@ -22,17 +22,28 @@ import { categoryApi } from "../../api/categoryApi";
 import { propertyApi } from "../../api/propertyApi";
 import type { Category, SubCategory } from "../../types/category";
 import type { Property } from "../../types/property";
-import type { PaymentStatus } from "../../types/paymentSlip";
+import type { PaymentSlipAudit, PaymentStatus } from "../../types/paymentSlip";
 import { colors } from "../../theme/colors";
 import SelectField from "../../components/SelectField";
 
 type Props = NativeStackScreenProps<AppStackParamList, "PaymentSlipForm">;
+
+const AUDIT_PREVIEW_COUNT = 5;
 
 function formatDateLocal(date: Date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, "0");
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
+}
+
+function formatChangedAt(changedAt: string) {
+  const [datePart, timePart] = changedAt.split("T");
+  return `${datePart} ${timePart?.slice(0, 5) ?? ""}`;
+}
+
+function statusLabel(status: PaymentStatus) {
+  return status === "PAID" ? "Plaćeno" : "Neplaćeno";
 }
 
 export default function PaymentSlipFormScreen({ navigation, route }: Props) {
@@ -72,6 +83,8 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [pickedImage, setPickedImage] = useState<PickedImage | null>(null);
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [isViewerVisible, setIsViewerVisible] = useState(false);
+  const [auditHistory, setAuditHistory] = useState<PaymentSlipAudit[]>([]);
+  const [showAllAudit, setShowAllAudit] = useState(false);
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [subCategories, setSubCategories] = useState<SubCategory[]>([]);
@@ -116,6 +129,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         setStatus(slip.status);
         setPaidAt(slip.paidAt ? new Date(slip.paidAt) : null);
         setExistingImageUrl(slip.imageUrl);
+        setAuditHistory(await paymentSlipApi.getAudit(paymentSlipId));
       } else if (scannedData) {
         setIban(scannedData.iban);
         setAmount(String(scannedData.amount));
@@ -220,7 +234,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     setIsSubmitting(true);
     try {
       const request = {
-        iban: iban.trim(),
+        iban: iban.replace(/\s+/g, "").toUpperCase(),
         amount: parsedAmount,
         referenceNumber: referenceNumber || undefined,
         paymentModel: paymentModel || undefined,
@@ -264,6 +278,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       );
       setStatus(updated.status);
       setPaidAt(updated.paidAt ? new Date(updated.paidAt) : null);
+      setAuditHistory(await paymentSlipApi.getAudit(paymentSlipId!));
     } catch (err: any) {
       Alert.alert(
         "Promjena statusa nije uspjela",
@@ -392,6 +407,31 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
           )}
         </View>
       )}
+      {isEditing && auditHistory.length > 0 && (
+        <View style={styles.auditSection}>
+          <Text style={styles.label}>Povijest promjena statusa</Text>
+          {(showAllAudit ? auditHistory : auditHistory.slice(0, AUDIT_PREVIEW_COUNT)).map(
+            (entry) => (
+              <View key={entry.id} style={styles.auditRow}>
+                <Text style={styles.auditRowText}>
+                  {statusLabel(entry.oldStatus)} → {statusLabel(entry.newStatus)}
+                </Text>
+                <Text style={styles.auditRowMeta}>
+                  {formatChangedAt(entry.changedAt)} · {entry.changedByEmail}
+                </Text>
+              </View>
+            ),
+          )}
+          {!showAllAudit && auditHistory.length > AUDIT_PREVIEW_COUNT && (
+            <Pressable onPress={() => setShowAllAudit(true)}>
+              <Text style={styles.auditShowMore}>
+                Prikaži još {auditHistory.length - AUDIT_PREVIEW_COUNT}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+
       <Text style={styles.label}>Fotografija uplatnice</Text>
       <Pressable
         style={styles.imagePicker}
@@ -582,6 +622,20 @@ const styles = StyleSheet.create({
   paidAtText: { fontSize: 14, color: colors.textSecondary },
   paidAtEdit: { fontSize: 14, color: colors.primary, fontWeight: "600" },
   paidAtPickerWrapper: { marginBottom: 16 },
+  auditSection: { marginBottom: 16 },
+  auditRow: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gridline,
+    paddingVertical: 8,
+  },
+  auditRowText: { fontSize: 14, color: "#000" },
+  auditRowMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  auditShowMore: {
+    fontSize: 13,
+    color: colors.primary,
+    fontWeight: "600",
+    marginTop: 8,
+  },
   scanBanner: {
     backgroundColor: "#eff6ff",
     borderRadius: 8,

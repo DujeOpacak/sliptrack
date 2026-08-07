@@ -27,18 +27,18 @@ export default function BarChart({ data, formatValue = defaultFormat }: Props) {
           key={datum.label}
           style={[styles.row, index > 0 && styles.rowGap]}
         >
-          <Text style={styles.label} numberOfLines={1}>
-            {datum.label}
-          </Text>
-          <View style={styles.track}>
-            <View
-              style={[
-                styles.bar,
-                { width: `${Math.max((datum.value / maxValue) * 100, 3)}%` },
-              ]}
-            />
+          <Text style={styles.label}>{datum.label}</Text>
+          <View style={styles.barRow}>
+            <View style={styles.track}>
+              <View
+                style={[
+                  styles.bar,
+                  { width: `${Math.max((datum.value / maxValue) * 100, 3)}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.value}>{formatValue(datum.value)}</Text>
           </View>
-          <Text style={styles.value}>{formatValue(datum.value)}</Text>
         </View>
       ))}
     </View>
@@ -46,9 +46,10 @@ export default function BarChart({ data, formatValue = defaultFormat }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center" },
-  rowGap: { marginTop: 10 },
-  label: { width: 96, fontSize: 13, color: colors.textSecondary },
+  row: {},
+  rowGap: { marginTop: 14 },
+  label: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
+  barRow: { flexDirection: "row", alignItems: "center" },
   track: { flex: 1, height: 18, justifyContent: "center" },
   bar: {
     height: 18,

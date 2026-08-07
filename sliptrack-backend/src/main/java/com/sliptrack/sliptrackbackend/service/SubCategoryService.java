@@ -63,6 +63,12 @@ public class SubCategoryService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Potkategorija s ovim nazivom već postoji unutar ove kategorije");
         }
 
+        if (subCategory.isAllowsProperty() && !request.isAllowsProperty()
+                && paymentSlipRepository.existsBySubCategoryIdAndPropertyIsNotNull(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                    "Potkategorija ima uplatnice s dodijeljenom nekretninom — ne može se ukloniti dopuštanje nekretnine");
+        }
+
         subCategory.setName(request.getName());
         subCategory.setAllowsProperty(request.isAllowsProperty());
         subCategory.setCategory(category);

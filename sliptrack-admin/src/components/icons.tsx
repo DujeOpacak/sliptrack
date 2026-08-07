@@ -109,6 +109,25 @@ export function ChevronIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function MenuIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <path d="M4 6h16" />
+      <path d="M4 12h16" />
+      <path d="M4 18h16" />
+    </Base>
+  );
+}
+
+export function CloseIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <path d="M5 5l14 14" />
+      <path d="M19 5L5 19" />
+    </Base>
+  );
+}
+
 export function SortIcon({ direction }: { direction: "asc" | "desc" | null }) {
   return (
     <svg width="9" height="12" viewBox="0 0 9 12" fill="none">

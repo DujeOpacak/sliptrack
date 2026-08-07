@@ -20,7 +20,7 @@ import java.util.Optional;
 public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>, JpaSpecificationExecutor<PaymentSlip> {
 
     @Override
-    @EntityGraph(attributePaths = {"category", "subCategory", "property"})
+    @EntityGraph(attributePaths = {"category", "subCategory", "subCategory.category", "property"})
     List<PaymentSlip> findAll(Specification<PaymentSlip> spec);
 
     @EntityGraph(attributePaths = {"category", "subCategory", "property"})
@@ -32,6 +32,8 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
 
     boolean existsByPropertyId(Long propertyId);
 
+    boolean existsBySubCategoryIdAndPropertyIsNotNull(Long subCategoryId);
+
     List<PaymentSlip> findByStatusAndDueDateBetween(PaymentStatus status, LocalDate from, LocalDate to);
 
     List<PaymentSlip> findByStatusAndDueDate(PaymentStatus status, LocalDate dueDate);
@@ -40,8 +42,8 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
 
     List<PaymentSlip> findByUserIdAndProviderNameOrderByDueDateAsc(Long userId, String providerName);
 
-    boolean existsByUserIdAndProviderNameAndStatusAndDueDateBetween(
-            Long userId, String providerName, PaymentStatus status, LocalDate from, LocalDate to);
+    boolean existsByUserIdAndProviderNameAndDueDateBetween(
+            Long userId, String providerName, LocalDate from, LocalDate to);
 
     @Query("""
             SELECT p.user.id, p.providerName

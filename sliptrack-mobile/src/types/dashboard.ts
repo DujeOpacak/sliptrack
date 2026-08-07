@@ -12,6 +12,24 @@ export interface CategoryAmount {
   count: number;
 }
 
+export interface SubCategoryAmount {
+  subCategoryId: number;
+  subCategoryName: string;
+  categoryId: number;
+  categoryName: string;
+  totalAmount: number;
+  count: number;
+}
+
+export interface PropertySubCategoryAmount {
+  propertyId: number;
+  propertyName: string;
+  subCategoryId: number;
+  subCategoryName: string;
+  totalAmount: number;
+  count: number;
+}
+
 export interface ProviderAmount {
   providerName: string;
   totalAmount: number;

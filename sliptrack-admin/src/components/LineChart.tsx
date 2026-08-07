@@ -21,7 +21,7 @@ const defaultFormat = (v: number) => String(v);
 export function LineChart({ data, formatValue = defaultFormat }: LineChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const el = containerRef.current;
@@ -37,6 +37,9 @@ export function LineChart({ data, formatValue = defaultFormat }: LineChartProps)
 
   const maxValue = Math.max(...data.map((d) => d.value), 1);
   const plotHeight = HEIGHT - PADDING_TOP - PADDING_BOTTOM;
+  // Cap visible x-axis labels to ~8 regardless of point count, or long ranges
+  // (e.g. 24 months) collide into an unreadable smear, especially on narrow screens.
+  const labelStep = Math.max(1, Math.ceil(data.length / 8));
 
   const points = data.map((d, i) => {
     const x = data.length === 1 ? width / 2 : (i / (data.length - 1)) * width;
@@ -51,7 +54,7 @@ export function LineChart({ data, formatValue = defaultFormat }: LineChartProps)
     return { value: maxValue * fraction, y: PADDING_TOP + plotHeight - fraction * plotHeight };
   }).reverse();
 
-  const hovered = hoverIndex !== null ? points[hoverIndex] : null;
+  const selected = selectedIndex !== null ? points[selectedIndex] : null;
 
   return (
     <div className={styles.wrapper}>
@@ -89,30 +92,30 @@ export function LineChart({ data, formatValue = defaultFormat }: LineChartProps)
                   strokeWidth={2}
                 />
                 <rect
-                  x={p.x - 10}
-                  y={p.y - 10}
-                  width={20}
-                  height={20}
+                  x={p.x - 12}
+                  y={p.y - 12}
+                  width={24}
+                  height={24}
                   fill="transparent"
-                  onMouseEnter={() => setHoverIndex(i)}
-                  onMouseLeave={() => setHoverIndex((cur) => (cur === i ? null : cur))}
+                  style={{ cursor: "pointer" }}
+                  onClick={() => setSelectedIndex((cur) => (cur === i ? null : i))}
                 />
               </g>
             ))}
           </svg>
         )}
 
-        {hovered && (
-          <div className={styles.tooltip} style={{ left: hovered.x, top: hovered.y - 10 }}>
-            <div className={styles.tooltipMonth}>{hovered.label}</div>
-            <div className={styles.tooltipValue}>{formatValue(hovered.value)}</div>
+        {selected && (
+          <div className={styles.tooltip} style={{ left: selected.x, top: selected.y - 10 }}>
+            <div className={styles.tooltipMonth}>{selected.label}</div>
+            <div className={styles.tooltipValue}>{formatValue(selected.value)}</div>
           </div>
         )}
 
         <div className={styles.xAxis}>
-          {points.map((p) => (
+          {points.map((p, i) => (
             <span key={p.label} className={styles.xLabel}>
-              {p.label}
+              {i % labelStep === 0 ? p.label : ""}
             </span>
           ))}
         </div>

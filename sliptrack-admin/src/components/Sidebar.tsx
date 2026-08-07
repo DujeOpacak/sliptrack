@@ -1,6 +1,6 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { CategoriesIcon, DashboardIcon, LogoutIcon, StatsIcon, UsersIcon } from "./icons";
+import { CategoriesIcon, CloseIcon, DashboardIcon, LogoutIcon, StatsIcon, UsersIcon } from "./icons";
 import styles from "./Sidebar.module.css";
 
 const NAV_ITEMS = [
@@ -10,15 +10,23 @@ const NAV_ITEMS = [
   { to: "/stats", label: "Statistika", icon: StatsIcon, end: false },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
 
   return (
-    <aside className={styles.sidebar}>
+    <aside className={isOpen ? `${styles.sidebar} ${styles.sidebarOpen}` : styles.sidebar}>
       <div className={styles.brand}>
         <div className={styles.brandMark}>
           SLIP<span>TRACK</span> / ADMIN
         </div>
+        <button className={styles.closeBtn} onClick={onClose} aria-label="Zatvori izbornik">
+          <CloseIcon width={18} height={18} />
+        </button>
       </div>
 
       <nav className={styles.nav}>
@@ -27,6 +35,7 @@ export function Sidebar() {
             key={to}
             to={to}
             end={end}
+            onClick={onClose}
             className={({ isActive }) =>
               isActive ? `${styles.navItem} ${styles.navItemActive}` : styles.navItem
             }

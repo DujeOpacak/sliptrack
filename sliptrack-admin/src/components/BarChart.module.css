@@ -1,23 +1,24 @@
 .chart {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .row {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .label {
-  width: 140px;
-  flex-shrink: 0;
   font-size: 13px;
   color: var(--text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.barRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .track {

@@ -1,5 +1,6 @@
 package com.sliptrack.sliptrackbackend.security;
 
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,7 +49,7 @@ public class JwtService {
         return parseClaims(token).getExpiration().before(new Date());
     }
 
-    private io.jsonwebtoken.Claims parseClaims(String token) {
+    private Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(signingKey)
                 .build()

@@ -31,6 +31,7 @@ public class PaymentSlipService {
     private final PropertyRepository propertyRepository;
     private final CurrentUserService currentUserService;
     private final PaymentSlipImageService paymentSlipImageService;
+    private final NotificationRepository notificationRepository;
 
     public List<PaymentSlipResponse> getAll(PaymentStatus status, Long categoryId, Long subCategoryId,
                                              Long propertyId, String providerName, LocalDate dueDateFrom, LocalDate dueDateTo) {
@@ -175,6 +176,7 @@ public class PaymentSlipService {
     public void delete(Long id) {
         PaymentSlip paymentSlip = findOwnedOrThrow(id);
         paymentSlipAuditRepository.deleteByPaymentSlipId(id);
+        notificationRepository.detachPaymentSlip(id);
         paymentSlipRepository.delete(paymentSlip);
 
         if (paymentSlip.getImageKey() != null) {

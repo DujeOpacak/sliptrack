@@ -2,13 +2,17 @@ package com.sliptrack.sliptrackbackend.controller;
 
 import com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.DashboardSummaryResponse;
+import com.sliptrack.sliptrackbackend.dto.PropertySubCategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.ProviderAmountResponse;
+import com.sliptrack.sliptrackbackend.dto.SubCategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.TimelinePointResponse;
 import com.sliptrack.sliptrackbackend.service.DashboardService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -29,6 +33,24 @@ public class DashboardController {
     @GetMapping("/by-category")
     public ResponseEntity<List<CategoryAmountResponse>> getByCategory() {
         return ResponseEntity.ok(dashboardService.getByCategory());
+    }
+
+    @GetMapping("/by-subcategory")
+    public ResponseEntity<List<SubCategoryAmountResponse>> getBySubCategory(
+            @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long propertyId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateTo
+    ) {
+        return ResponseEntity.ok(dashboardService.getBySubCategory(categoryId, propertyId, dueDateFrom, dueDateTo));
+    }
+
+    @GetMapping("/property-comparison")
+    public ResponseEntity<List<PropertySubCategoryAmountResponse>> getPropertyComparison(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dueDateTo
+    ) {
+        return ResponseEntity.ok(dashboardService.getPropertyComparison(dueDateFrom, dueDateTo));
     }
 
     @GetMapping("/by-provider")

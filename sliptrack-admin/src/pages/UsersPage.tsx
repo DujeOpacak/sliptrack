@@ -189,6 +189,7 @@ export function UsersPage() {
           {sortedUsers.length === 0 ? (
             <div className={styles.emptyState}>Nema korisnika koji odgovaraju pretrazi.</div>
           ) : (
+            <div className={styles.tableWrapper}>
             <table className={styles.table}>
               <thead>
                 <tr>
@@ -240,6 +241,7 @@ export function UsersPage() {
                 })}
               </tbody>
             </table>
+            </div>
           )}
         </>
       )}

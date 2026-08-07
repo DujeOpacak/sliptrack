@@ -4,10 +4,12 @@
   align-items: center;
   justify-content: center;
   background: var(--bg);
+  padding: 16px;
 }
 
 .panel {
   width: 340px;
+  max-width: 100%;
   border: 1px solid var(--border);
   background: var(--surface);
   padding: 36px 32px;

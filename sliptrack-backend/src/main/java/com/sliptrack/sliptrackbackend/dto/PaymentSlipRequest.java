@@ -3,6 +3,8 @@ package com.sliptrack.sliptrackbackend.dto;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -14,18 +16,23 @@ import java.time.LocalDate;
 public class PaymentSlipRequest {
 
     @NotBlank
+    @Pattern(regexp = "HR\\d{19}", message = "IBAN mora biti u hrvatskom formatu (HR + 19 znamenki)")
     private String iban;
 
     @NotNull
     @DecimalMin(value = "0.0", inclusive = false)
     private BigDecimal amount;
 
+    @Size(max = 255)
     private String referenceNumber;
 
+    @Size(max = 255)
     private String paymentModel;
 
+    @Size(max = 255)
     private String providerName;
 
+    @Size(max = 255)
     private String description;
 
     @NotNull

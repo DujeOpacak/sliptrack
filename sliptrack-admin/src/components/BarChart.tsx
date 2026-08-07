@@ -22,13 +22,13 @@ export function BarChart({ data }: BarChartProps) {
     <div className={styles.chart}>
       {data.map((datum) => (
         <div className={styles.row} key={datum.label}>
-          <span className={styles.label} title={datum.label}>
-            {datum.label}
-          </span>
-          <div className={styles.track}>
-            <div className={styles.bar} style={{ width: `${(datum.value / maxValue) * 100}%` }} />
+          <span className={styles.label}>{datum.label}</span>
+          <div className={styles.barRow}>
+            <div className={styles.track}>
+              <div className={styles.bar} style={{ width: `${(datum.value / maxValue) * 100}%` }} />
+            </div>
+            <span className={styles.value}>{datum.value}</span>
           </div>
-          <span className={styles.value}>{datum.value}</span>
         </div>
       ))}
     </div>

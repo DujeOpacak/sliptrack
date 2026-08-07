@@ -1,6 +1,7 @@
 import { apiClient } from "./client";
 import type {
   PaymentSlip,
+  PaymentSlipAudit,
   PaymentSlipFilters,
   PaymentSlipRequest,
   PaymentStatus,
@@ -38,6 +39,12 @@ export const paymentSlipApi = {
     const response = await apiClient.patch<PaymentSlip>(
       `/payment-slips/${id}/status`,
       { status, paidAt },
+    );
+    return response.data;
+  },
+  async getAudit(id: number) {
+    const response = await apiClient.get<PaymentSlipAudit[]>(
+      `/payment-slips/${id}/audit`,
     );
     return response.data;
   },

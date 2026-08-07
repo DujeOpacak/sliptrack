@@ -31,6 +31,14 @@ export interface PaymentSlipFilters {
   dueDateTo?: string;
 }
 
+export interface PaymentSlipAudit {
+  id: number;
+  oldStatus: PaymentStatus;
+  newStatus: PaymentStatus;
+  changedByEmail: string;
+  changedAt: string;
+}
+
 export interface PaymentSlipRequest {
   iban: string;
   amount: number;

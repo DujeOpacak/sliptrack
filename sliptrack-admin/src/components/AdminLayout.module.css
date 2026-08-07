@@ -9,6 +9,45 @@
   padding: 40px 48px;
 }
 
+.mobileTopBar {
+  display: none;
+}
+
+.menuBtn {
+  background: transparent;
+  border: 1px solid var(--border-strong);
+  color: var(--text-secondary);
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.menuBtn:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.mobileBrand {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+.mobileBrand span {
+  color: var(--accent);
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 250;
+}
+
 .pageHeader {
   margin-bottom: 32px;
   padding-bottom: 20px;
@@ -27,4 +66,30 @@
   margin-top: 6px;
   color: var(--text-secondary);
   font-size: 13px;
+}
+
+@media (max-width: 768px) {
+  .content {
+    padding: 20px 16px;
+  }
+
+  .mobileTopBar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: -20px -16px 20px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .pageHeader {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .pageTitle {
+    font-size: 19px;
+  }
 }
