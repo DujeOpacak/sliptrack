@@ -24,16 +24,26 @@ public class ExpoPushService {
 
     private void sendToToken(String deviceToken, String title, String body) {
         try {
-            restClient.post()
+            String response = restClient.post()
                     .uri(EXPO_PUSH_URL)
                     .body(Map.of(
                             "to", deviceToken,
                             "title", title,
                             "body", body,
-                            "sound", "default"
+                            "sound", "default",
+                            // Bez ovoga Android FCM koristi generički fcm_fallback_notification_channel
+                            // (IMPORTANCE_DEFAULT, bez heads-up banera) umjesto app-ovog "default" kanala
+                            // (IMPORTANCE_HIGH), koji registerPushToken.ts kreira upravo za tu svrhu.
+                            "channelId", "default"
                     ))
                     .retrieve()
-                    .toBodilessEntity();
+                    .body(String.class);
+
+            // Expo API zna vratiti 200 OK s greškom unutar JSON tijela (npr. DeviceNotRegistered,
+            // InvalidCredentials) — to ne baca iznimku, pa se mora ručno provjeriti tekst odgovora.
+            if (response != null && response.contains("\"status\":\"error\"")) {
+                log.warn("Expo push API vratio grešku za uređaj (token {}): {}", deviceToken, response);
+            }
         } catch (Exception e) {
             log.warn("Slanje push notifikacije nije uspjelo za uređaj (token {}): {}", deviceToken, e.getMessage());
         }

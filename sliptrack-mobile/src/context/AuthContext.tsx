@@ -20,9 +20,8 @@ async function registerDeviceForPush() {
     }
     const device = await deviceApi.register(registration);
     await tokenStorage.saveDeviceId(device.id);
-  } catch (err) {
-    // TODO: remove this log once Android push registration failure is diagnosed.
-    console.warn("registerDeviceForPush failed:", err);
+  } catch {
+    // Best-effort — push registration failure shouldn't block auth flows.
   }
 }
 

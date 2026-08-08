@@ -39,3 +39,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Firebase — vezan uz konkretan projekt, ne treba biti javan
+google-services.json

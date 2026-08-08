@@ -2,9 +2,11 @@ import React, {
   createContext,
   useContext,
   useEffect,
+  useRef,
   useState,
   useCallback,
 } from "react";
+import { AppState, type AppStateStatus } from "react-native";
 import * as Notifications from "expo-notifications";
 import { notificationApi } from "../api/notificationApi";
 
@@ -34,6 +36,19 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const subscription = Notifications.addNotificationReceivedListener(() => {
       refreshUnreadCount();
+    });
+    return () => subscription.remove();
+  }, [refreshUnreadCount]);
+
+  // Push primljen dok je app u pozadini ne mora probuditi addNotificationReceivedListener
+  // (obrađuje se na native/OS razini) — nadoknađuje se osvježavanjem kad korisnik vrati app u foreground.
+  const appStateRef = useRef(AppState.currentState);
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (nextState: AppStateStatus) => {
+      if (appStateRef.current !== "active" && nextState === "active") {
+        refreshUnreadCount();
+      }
+      appStateRef.current = nextState;
     });
     return () => subscription.remove();
   }, [refreshUnreadCount]);
