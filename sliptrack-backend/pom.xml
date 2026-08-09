@@ -29,6 +29,17 @@
     <properties>
         <java.version>21</java.version>
     </properties>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.testcontainers</groupId>
+                <artifactId>testcontainers-bom</artifactId>
+                <version>${testcontainers.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -100,10 +111,50 @@
             <artifactId>spring-boot-starter-webmvc-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- *Test = brzi unit testovi (bez Springa), *IT = integracijski (@SpringBootTest +
+                         Testcontainers). Konvencija imenovanja zadržana radi jasnoće, ali obje vrste se
+                         izvršavaju kroz isti mvn test/Surefire — Failsafe plugin (koji bi *IT pokretao
+                         u zasebnoj integration-test fazi) namjerno izostavljen kao nepotrebna složenost
+                         za opseg ovog rada. -->
+                    <includes>
+                        <include>**/*Test.java</include>
+                        <include>**/*Tests.java</include>
+                        <include>**/*IT.java</include>
+                    </includes>
+                    <!-- Registrira Mockito kao pravi -javaagent (property niže) umjesto da se
+                         oslanja na dinamičko samo-kačenje, koje noviji JDK-ovi sve više ograničavaju
+                         (vidi warning: "Dynamic loading of agents will be disallowed by default in
+                         a future release"). Mockito se nigdje eksplicitno ne koristi u projektnim
+                         testovima — dolazi tranzitivno preko *-test startera. -->
+                    <argLine>-javaagent:${org.mockito:mockito-core:jar}</argLine>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>resolve-mockito-agent</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

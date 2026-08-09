@@ -774,3 +774,47 @@ Vratiti reminder.cron na 0 0 8 * * * ako korisnik to još nije napravio
 Testovi (poglavlje 5) — sad stvarno sljedeći korak, cijeli vođeni review + lov na glupi kod + ručno testiranje popravaka je gotovo
 Deployment (poglavlje 4.6) — VPS s Docker Compose, odluka o hostingu i dalje otvorena
 iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun)
+
+09.08.2026. — Dan 13, nastavak 3 — Testiranje (poglavlje 5.2/5.3), unit + integracijski testovi
+
+Što je napravljeno
+
+Korisnik pitao je li pametnije prvo raditi testove ili deployment — preporučeno testovi prvo (kod je upravo stabiliziran, dobar trenutak da se ispravno ponašanje "zaključa" prije nego deployment konfiguracija opet nešto dirne; deployment odluka o hostingu ionako čeka odvojeno)
+Korisnik tražio objašnjenje unit vs integracijski testovi (razlika, konkretni primjeri iz projekta, piramida testova) prije početka — dano, s tablicom usporedbe i primjerima iz parseOcrText.ts (unit) i PaymentSlipController (integracijski)
+Pitanje "treba li testirati sve" — odgovoreno: ne, preporučen fokus na poslovnu logiku i sigurnosno-kritične putove, eksplicitno preskočiti UI/component testove (nerazmjeran trud za korist)
+
+Mobile (5.2, točnost digitalizacije)
+
+Korisnik pitao gdje se u praksi pišu ovakvi testovi — objašnjen co-located obrazac (`*.test.ts` odmah pored izvornika), standard za Expo/RN projekte
+jest-expo (~54.0.17) + @types/jest instalirani preko `npx expo install --dev` (poštuje projektnu konvenciju verzioniranog Expo installa); package.json dobio "test": "jest" skriptu i jest.preset konfiguraciju
+parseHub3.test.ts (7 testova) i parseOcrText.test.ts (9 testova, uklj. regresijski test za AMOUNT_REGEX bug popravljen ranije danas) napisani i prošli, 16/16
+Korisnik pitao je li `npm test -- --coverage` pregledava cijeli kod ili samo testirani dio — objašnjeno da Jest bez `collectCoverageFrom` izvještava SAMO o fajlovima koje testovi stvarno importaju (parseHub3.ts/parseOcrText.ts), sve ostalo (ekrani, context, API wrapperi — desetci fajlova) potpuno izostavljeno iz izvještaja, zavaravajući "100%" dojam; dodan `collectCoverageFrom: ["src/**/*.{ts,tsx}", "!src/**/*.test.{ts,tsx}"]` da se dobije poštena slika (netestirani fajlovi kao 0%)
+Korisnik pitao je li potrebno testirati sve na mobile frontendu s obzirom na nizak ukupni postotak (2.95%) — potvrđeno da ne, uz jednu ispravku: `utils/dateRange.ts` mi je promaknuo u prvoj preporuci, ali je iste kategorije kao parseri (čista datumska logika, koristi se u filterima na više ekrana, ima rubni slučaj veljače u prijestupnoj/neprijestupnoj godini preko `new Date(year, month, 0).getDate()` trika) — dodan `dateRange.test.ts` (7 testova). Konačno stanje: 23 testa, `utils/` folder 71% pokriven (100% na sve tri "čiste logike" datoteke), sve ostalo namjerno bez testova s jasnim obrazloženjem za 5.1
+
+Backend (5.3, funkcionalno/integracijsko)
+
+Prije implementacije, korisnik tražio plan — objašnjen produkcijski standard (test slices @WebMvcTest/@DataJpaTest/@SpringBootTest, Testcontainers vs H2 i zašto H2 rizičan za ovaj projekt zbog Postgres-specifičnog TO_CHAR native upita, @Transactional rollback, real-JWT-flow vs @WithMockUser, *Test/*IT Maven konvencija) i projektna prilagodba (Failsafe plugin namjerno preskočen, *Test/*IT imenska konvencija zadržana samo radi jasnoće, sve kroz Surefire)
+pom.xml: dodane testcontainers-postgresql + eksplicitan dependencyManagement import testcontainers-bom (transitivno upravljan preko spring-boot-dependencies, ali Maven ipak treba eksplicitan import u vlastitom pom-u — standardan Spring Initializr obrazac)
+Niz infrastrukturnih prepreka riješeno redom, svaka dijagnosticirana i popravljena prije nastavka:
+  - Testcontainers 2.x preimenovao artefakte (junit-jupiter→testcontainers-junit-jupiter, postgresql→testcontainers-postgresql) — ispravljeno u pom.xml
+  - Spring Boot 4.x premjestio @AutoConfigureMockMvc u novi paket (org.springframework.boot.webmvc.test.autoconfigure) — ispravljen import
+  - Spring Boot 4.x defaultno koristi Jackson 3.x (tools.jackson.databind.ObjectMapper, ne com.fasterxml.jackson.databind.ObjectMapper) — objašnjava zašto @Autowired ObjectMapper nije pronašao bean; stari Jackson 2.x na classpathu samo tranzitivno preko jjwt-jackson, nepovezano s Boot-ovim JSON slojem; ispravljeni importi u AbstractIntegrationTest i AuthControllerIT
+  - Surefire po defaultu ne pokreće *IT.java (samo *Test/*Tests/TestCase) — 18 integracijskih testova se uopće nije izvršavalo dok nije dodan eksplicitan <includes> s **/*IT.java (i vraćen **/*Tests.java koji je slučajno ispao kad je includes prvi put dodan, brišući Surefire defaultne obrasce)
+  - "Singleton container" zamka: @Testcontainers/@Container na statičkom polju u zajedničkoj baznoj klasi (AbstractIntegrationTest) gasi kontejner nakon SVAKE test klase koja je nasljeđuje — AuthControllerIT prošao, PaymentSlipControllerIT pao na "Connection refused" jer je dobio već ugašeni kontejner. Riješeno ručnim pokretanjem u static bloku (bez @Testcontainers anotacije) + @DynamicPropertySource za datasource, JVM shutdown hook (Ryuk) čisti na kraju procesa
+AbstractIntegrationTest bazna klasa gotova: MockMvc (ne RANDOM_PORT, potrebno da @Transactional rollback obuhvati HTTP zahtjev), MinIO endpoint prebačen na localhost (minio.endpoint u application.properties cilja LAN IP za fizički mobilni uređaj), registerAndGetAccessToken/createAdminAndGetAccessToken helperi kroz stvarne /api/auth/* pozive (admin nema register endpoint pa se ubacuje izravno kroz UserRepository, token i dalje kroz pravi /login)
+RecurringPatternServiceTest (9 testova, čisti JUnit bez Springa) — averageCadenceMonths/projectNextPredictedDate promijenjeni iz private u package-private radi testabilnosti; projectNextPredictedDate dodatno refaktoriran da prima today kao parametar umjesto LocalDate.now() interno, radi determinističkih testova neovisnih o danu pokretanja; pokriva mjesečni/polugodišnji/mješoviti cadence, "zaboravljen mjesec" (5 preskočenih ciklusa u jednom pozivu), day-of-month clamping (uklj. prijestupna godina)
+AuthControllerIT (7), PaymentSlipControllerIT (5, uklj. čišćenje nacrta koji je sadržavao besmislen leftover PUT poziv), CategoryControllerIT (6, autorizacija USER/ADMIN + FK-conflict 409) — svi kroz pravi HTTP+JWT+DB tok, ne mockano
+Ukupno 28 testova (uklj. postojeći SliptrackBackendApplicationTests placeholder), svi prolaze
+
+Mockito JDK warning
+
+Korisnik pitao za "Mockito is currently self-attaching..." JDK warning u test outputu — objašnjeno da dolazi tranzitivno preko *-test startera (Mockito se nigdje eksplicitno ne koristi), bezopasno na JDK 21 ali unaprijed upozorava na buduće JDK ograničenje dinamičkog agent-loadinga
+Riješeno točno prema preporuci iz same warning poruke: maven-dependency-plugin (properties goal u initialize fazi → ${org.mockito:mockito-core:jar} property) + maven-surefire-plugin <argLine>-javaagent:...>. Warning nestao, svih 28 testova i dalje prolazi
+CLAUDE.md i DEVLOG.md ažurirani s punim stanjem 5.2/5.3
+
+Sutra
+
+5.1 (strategija) — napisati sam tekst poglavlja u radu; filozofija/obrazloženje već dogovoreno i zapisano u CLAUDE.md, samo treba prepisati u formalni oblik
+Vratiti reminder.cron na 0 0 8 * * * ako korisnik to još nije napravio
+Deployment (poglavlje 4.6) — VPS s Docker Compose, odluka o hostingu i dalje otvorena
+iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun)

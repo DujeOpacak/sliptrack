@@ -51,7 +51,8 @@ public class RecurringPatternService {
         LocalDate lastPaymentDate = history.get(history.size() - 1).getDueDate();
 
         long cadenceMonths = averageCadenceMonths(history);
-        LocalDate nextPredictedDate = projectNextPredictedDate(lastPaymentDate, cadenceMonths, averageDayOfMonth);
+        LocalDate nextPredictedDate =
+                projectNextPredictedDate(lastPaymentDate, cadenceMonths, averageDayOfMonth, LocalDate.now());
 
         RecurringPattern pattern = recurringPatternRepository.findByUserIdAndProviderName(userId, providerName)
                 .orElseGet(() -> RecurringPattern.builder().user(user).providerName(providerName).build());
@@ -66,8 +67,9 @@ public class RecurringPatternService {
 
     // Average gap between consecutive slips, rounded to whole months (min. 1) — lets
     // quarterly/semi-annual/annual providers get a correct cadence instead of an
-    // assumed monthly one.
-    private long averageCadenceMonths(List<PaymentSlip> history) {
+    // assumed monthly one. Package-private (not private) so RecurringPatternServiceTest
+    // can exercise it directly without mocking the repositories for pure date-math logic.
+    long averageCadenceMonths(List<PaymentSlip> history) {
         long totalMonths = 0;
         for (int i = 1; i < history.size(); i++) {
             YearMonth previous = YearMonth.from(history.get(i - 1).getDueDate());
@@ -81,8 +83,9 @@ public class RecurringPatternService {
     // Keeps advancing by one cadence at a time until the prediction is today or later,
     // so a missed cycle (no new slip logged) doesn't leave nextPredictedDate stuck in
     // the past forever — each daily recompute self-corrects it back into the future.
-    private LocalDate projectNextPredictedDate(LocalDate lastPaymentDate, long cadenceMonths, int averageDayOfMonth) {
-        LocalDate today = LocalDate.now();
+    // `today` is injected (not LocalDate.now() internally) so tests can assert against
+    // fixed dates instead of relative-to-clock-at-test-run-time.
+    LocalDate projectNextPredictedDate(LocalDate lastPaymentDate, long cadenceMonths, int averageDayOfMonth, LocalDate today) {
         LocalDate predicted = lastPaymentDate;
         do {
             YearMonth nextMonth = YearMonth.from(predicted).plusMonths(cadenceMonths);
