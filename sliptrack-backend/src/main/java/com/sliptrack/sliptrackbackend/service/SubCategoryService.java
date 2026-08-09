@@ -10,6 +10,7 @@ import com.sliptrack.sliptrackbackend.repository.SubCategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
@@ -52,12 +53,14 @@ public class SubCategoryService {
         return toResponse(subCategoryRepository.save(subCategory));
     }
 
+    @Transactional
     public SubCategoryResponse update(Long id, SubCategoryRequest request) {
         SubCategory subCategory = findByIdOrThrow(id);
         Category category = findCategoryOrThrow(request.getCategoryId());
+        Long previousCategoryId = subCategory.getCategory().getId();
+        boolean categoryChanged = !previousCategoryId.equals(category.getId());
 
-        boolean nameOrCategoryChanged = !subCategory.getName().equals(request.getName())
-                || !subCategory.getCategory().getId().equals(category.getId());
+        boolean nameOrCategoryChanged = !subCategory.getName().equals(request.getName()) || categoryChanged;
 
         if (nameOrCategoryChanged && subCategoryRepository.existsByNameAndCategoryId(request.getName(), category.getId())) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Potkategorija s ovim nazivom već postoji unutar ove kategorije");
@@ -74,6 +77,14 @@ public class SubCategoryService {
         subCategory.setCategory(category);
 
         SubCategory saved = subCategoryRepository.save(subCategory);
+
+        // Existing PaymentSlips recorded their category at creation time (PaymentSlip.category) —
+        // moving the subcategory to a different category would otherwise leave those rows pointing
+        // at a category that no longer matches subCategory.getCategory(), corrupting dashboard/admin
+        // grouping by category. Keep them in sync instead of blocking the move outright.
+        if (categoryChanged) {
+            paymentSlipRepository.reassignCategoryForSubCategory(id, category);
+        }
 
         return toResponse(saved, category);
     }

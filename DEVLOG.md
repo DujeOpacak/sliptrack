@@ -707,3 +707,70 @@ Sutra
 Nastaviti na admin strukturu (posljednji dio vođenog reviewa, procijenjeno ~4-5 faza)
 Nakon cijelog code reviewa: preostali lov na "glupi kod"/bugove, pa testovi (poglavlje 5) i deployment (poglavlje 4.6)
 iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun), jedino preostalo poznato ograničenje
+
+09.08.2026. — Dan 13 — Vođeni review admin strukture (Faza 1-5, gotovo) — cijeli vođeni code review završen
+
+Što je napravljeno
+
+Nastavljen i završen vođeni review, admin struktura, svih 5 dogovorenih faza u jednom danu: (1) ulazna točka + auth sloj — main.tsx vs App.tsx razlika objašnjena (JS entry point koji montira React vs prva React komponenta koja slaže routing/contexte), StrictMode svrha objašnjena kroz konkretan trag u kodu (AuthContext hasBootstrapped ref postoji baš zbog StrictMode dvostrukog pokretanja efekta u devu), tokenStore/client.ts/authApi.ts/AuthContext.tsx/ProtectedRoute.tsx/LoginPage.tsx prošli redom; korisnik tražio dodatno pojašnjenje request/response toka (dan sequence-dijagram kroz cijeli 401→refresh→retry ciklus), pitao je li interceptor obrazac standardna praksa (potvrđeno, uspoređeno s alternativom bez interceptora — DRY kršenje po svakoj komponenti), što je axios (usporedba s fetch API-jem) i čemu služi /auth/me (JWT nosi samo email, endpoint dohvaća ime/prezime/rolu za UI + provjera ne-ADMIN tihe sesije)
+(2) layout + routing — App.tsx routing struktura (layout-ruta obrazac s ProtectedRoute+AdminLayout+Outlet), AdminLayout.tsx (dvije stvari u fajlu: AdminLayout komponenta + PageHeader), Sidebar.tsx (NAV_ITEMS deklarativan niz, end flag razlog), CSS responsive mehanika (off-canvas drawer translateX)
+(3) Kategorije — categoryApi/types pregledani, CategoriesPage.tsx najsloženija stranica dosad: ModalState diskriminirana unija, lazy-load potkategorija (subCategoriesByCategory) odvojen od zasebnog allSubCategories fetcha samo za search index, auto-expand+seed pri pretrazi bez dodatnog network poziva, premještanje potkategorije između kategorija (dvostruki refetch stare+nove liste preko previousCategoryId parametra), extractErrorMessage/errors.ts FK 409 handling
+(4) Korisnici — adminApi/types pregledani, UsersPage.tsx filter→sort→CSV export lanac nad istim nizom (filteredUsers pa sortedUsers preko odvojenih useMemo, kopija niza prije .sort() da se ne mutira memo rezultat), localeCompare("hr") razlog za hrvatsku dijakritiku, isSelf frontend guard koji zrcali backend samo-deaktivacija pravilo (gumb disabled prije nego korisnik uopće pokuša), csv.ts (RFC4180 escaping + UTF-8 BOM)
+(5) Statistika/Pregled/Toast/Confirm — StatsPage.tsx (Promise.all paralelni fetch 5 poziva, registrationsTimeline isti kontinuirani-mjeseci-s-nulama obrazac kao mobile dashboard timeline, kategorija/potkategorija breakdown dijeli isti BarChart), DashboardPage.tsx (skraćena verzija + brzi linkovi), StatTile/BarChart/LineChart.tsx (LineChart vlastita SVG implementacija s ResizeObserver, klik-toggle tooltip umjesto hover — razlog ranije popravljenog touch bug-a, labelStep ograničenje X-os labela), ToastContext/ConfirmContext (Promise-based useConfirm() hook objašnjen, provjereno da .btn-danger klasa stvarno postoji u index.css)
+Review kroz svih 5 faza nije otkrio bugove u admin strukturi — kod dosljedan s mobile/backend obrascima (isti interceptor princip, isti extractErrorMessage/GlobalExceptionHandler ugovor, isti dataviz-validirani pristup grafovima kao mobile)
+CLAUDE.md i DEVLOG.md ažurirani da odraze završetak cijelog vođenog code reviewa (backend Faza 1-5 iz 07.08.2026, mobile Faza 1-6 iz 08.08.2026, admin Faza 1-5 iz 09.08.2026)
+
+Sutra
+
+Zajednički "lov na glupi kod" (bugovi/čišćenje) — sljedeći dogovoreni korak prije testova i deploymenta
+Nakon toga: testovi (poglavlje 5 — Jest za parseHub3.ts/parseOcrText.ts, backend @SpringBootTest/@WebMvcTest za ključne endpointe) i deployment (poglavlje 4.6 — VPS s Docker Compose)
+iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun), jedino preostalo poznato ograničenje
+
+09.08.2026. — Dan 13, nastavak — Lov na glupi kod (automatski code-review, 30 nalaza) + popravci + ručno regresijsko testiranje
+
+Što je napravljeno
+
+Korisnik pitao kojim pristupom krenuti u lov na glupi kod — ponuđene 3 opcije (automatski /code-review skill, nastavak ručnog vođenog pregleda s fokusom na bugove, hibrid); korisnik odabrao automatski skill na high razini, odvojeno po podprojektu
+/code-review high pokrenut tri puta (backend, mobile, admin) — backend i admin u pozadini, mobile vratio rezultat odmah; svaki review agent radi više-kutni finder pass (line-by-line, removed-behavior, cross-file tracer, reuse, simplification, efficiency, altitude, konvencije) pa sam verificira kandidate čitanjem izvornog koda prije prijave
+Ukupno 30 nalaza (10 backend, 10 mobile, 10 admin), svi prijavljeni kroz ReportFindings — najozbiljniji: RecurringPatternService predikcija trajno ušuti nakon jednog promašaja (backend), OCR regex gubi vodeću znamenku iznosa + UTC datum bug (mobile, oba tiho korumpiraju financijske podatke)
+
+Backend popravci (korisnik odabrao prve 3, pa dodatno CORS+EntityGraph, RefreshRequest/date-range/batching svjesno preskočeni)
+
+RecurringPatternService — korisnik tražio detaljno objašnjenje budućeg ponašanja prije implementacije (dva konkretna primjera: "zaboravljen mjesec" i "davatelj koji ne naplaćuje mjesečno"), zatim potvrdio da krećemo; implementirano averageCadenceMonths() (prosjek razmaka u mjesecima iz povijesti, ne fiksno "+1") + projectNextPredictedDate() (do-while petlja koja dodaje cikluse dok predikcija ne bude danas/budućnost) — pun dizajn dokumentiran u CLAUDE.md
+PaymentSlipRequest.setIban() normalizira (trim+uppercase) prije @Pattern validacije — rješava blokadu editiranja starih uplatnica sa formatnim odstupanjem
+SubCategoryService.update() (sad @Transactional) poziva novi PaymentSlipRepository.reassignCategoryForSubCategory() (@Modifying bulk UPDATE) kad se potkategorija premjesti u drugu kategoriju — bira "uskladi postojeće uplatnice" umjesto "blokiraj premještanje" (za razliku od allowsProperty guard-a, ovdje postoji smislen automatski popravak)
+CategoryRepository/SubCategoryRepository.countGroupedByCategory/SubCategory() prepisani da krenu OD Category/SubCategory s LEFT JOIN PaymentSlip — prazne kategorije se sad pojavljuju s count=0 u admin statistici; stare metode i mrtvi importi uklonjeni iz PaymentSlipRepository, AdminService ožičen na nove repozitorije
+SecurityConfig CORS allowed-origins split sad trimma razmake (Arrays.stream(...).map(String::trim))
+PaymentSlipRepository finder metode koje koristi Reminder/RecurringPattern dobile @EntityGraph(attributePaths="user") — preventivno, prije nego buduća izmjena (npr. personalizacija push teksta imenom) tiho uvede LazyInitializationException
+ExpoPushService/ReminderService prošireni da šalju data.paymentSlipId u push payloadu (izostavljeno za "predicted" slučaj) — priprema za mobile deep-link fix
+
+Mobile popravci (korisnik odabrao 1-3, ali #2 UTC datum bug svjesno odbačen kao irelevantan — hrvatski korisnici su uvijek na pozitivnom UTC offsetu pa se taj rubni slučaj ne može dogoditi)
+
+parseOcrText.ts AMOUNT_REGEX prepisan s jedne opcionalne grupe na dvije alternative s (?<!\d)/(?!\d) granicama — testirano node skriptom na više slučajeva (1234,56 / 1.234,56 / 12.345,67 / 56,78 / 123,456), sve ispravno
+NotificationContext.tsx dobio Notifications.setNotificationHandler (modulska razina) — push banner se sad prikazuje i u foregroundu
+Deep-link dodira na push (nalaz #9) — korisnik zatražio samo ovaj od preostalih 6, iako je zahtijevao izmjene na obje strane: mobile dobio navigation/navigationRef.ts (React Navigationov createNavigationContainerRef obrazac, pouzdaniji od useNavigation() jer NotificationProvider omata Navigator umjesto da bude unutar njega) + addNotificationResponseReceivedListener/getLastNotificationResponseAsync u NotificationContext.tsx
+
+Admin popravci (korisnik odabrao 1-3)
+
+AuthContext.login() cleanup authApi.logout() poziv sad u try/catch — mrežna greška više ne prekriva "nema administratorska prava" poruku
+CategoriesPage.tsx inicijalni allSubCategories fetch sad na neuspjeh prikaže toast umjesto tihog gašenja — bez ovoga jedan promašaj trajno slomi pretragu potkategorija za cijelu sesiju
+LoginPage.tsx zamijenio ručnu ekstrakciju poruke greške dijeljenim extractErrorMessage helperom
+
+Sve tri baze potvrđene čiste nakon svakog koraka (mvn compile, tsc --noEmit × 2 — subshell trik `(cd ... && npx tsc)` korišten jer je perzistentni cd izvan sliptrack-backend direktorija sandboxiran/resetiran)
+
+Ručno regresijsko testiranje (korisnik)
+
+Korisnik zatražio konkretne test podatke za "Očekivana uplatnica" (predikciju) — dan recept (3 uplatnice istog providerName, mjesečno razmaknute, zadnja prošli mjesec na dan unutar reminder.days-ahead prozora od danas)
+Prvi test nije poslao notifikaciju — dijagnoza kroz nekoliko krugova: korisnik pitao gleda li RecurringPattern samo providerName ili i category/subCategory (odgovoreno: samo providerName, exact string, category/subCategory irelevantni za grupiranje); korisnik zalijepio stvarne retke iz payment_slips kao JSON — ispravljena moja ranija pogrešna pretpostavka o rasporedu stupaca (sve tri uplatnice ispravno pod istim user_id=8, ne pod tri različita korisnika kako sam prvo pogrešno pročitao iz sirovog CSV-a)
+Uz korisnikovu dozvolu, izravno upitana recurring_patterns tablica (docker exec na Postgres kontejner) — next_predicted_date tocno 2026-08-11, poklapa se s ručnim izračunom, potvrđuje da RecurringPatternService fix radi ispravno; pravi uzrok pronađen u ReminderService.sendPredictedReminders() dedup provjeri — last_reminder_sent_at=2026-08-01 imao isti YearMonth (2026-08) kao target mjesec predikcije, pa je continue tiho preskočio slanje (namjerno ponašanje protiv duplog slanja, ne bug, ali blokiralo svjež test); riješeno DELETE FROM recurring_patterns WHERE id=6 (regenerira se čisto iz postojeće povijesti uplatnica)
+Nakon toga korisnik pitao kako testirati preostala 3 tipa podsjetnika i rubni slučaj "zaboravljen mjesec" bez čekanja mjesec dana — dan recept: konkretni dueDate raspon za upcoming/due-today/overdue (tablica), i SQL trik za edge case (privremeno pomaknuti postojeću HEP povijest u siječanj/veljaču/ožujak da projectNextPredictedDate() petlja mora preskočiti 5 ciklusa umjesto 1, provjeriti next_predicted_date + logove za exception, pa vratiti due_date natrag)
+Korisnik potvrdio: sve testirano, sve radi
+
+Napomena: reminder.cron u application.properties zatečen na test vrijednost 0 0/1 * * * * (svaka minuta) umjesto dokumentirane produkcijske 0 0 8 * * * iz DEVLOG-a 08.08.2026 — izgleda da revert nije spremljen/commitan tada; korisnik upozoren da ga vrati nakon što završi testiranje, još nije potvrđeno je li to napravljeno
+
+Sutra
+
+Vratiti reminder.cron na 0 0 8 * * * ako korisnik to još nije napravio
+Testovi (poglavlje 5) — sad stvarno sljedeći korak, cijeli vođeni review + lov na glupi kod + ručno testiranje popravaka je gotovo
+Deployment (poglavlje 4.6) — VPS s Docker Compose, odluka o hostingu i dalje otvorena
+iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun)

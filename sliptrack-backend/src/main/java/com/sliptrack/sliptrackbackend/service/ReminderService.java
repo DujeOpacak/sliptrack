@@ -61,7 +61,7 @@ public class ReminderService {
 
             String message = UPCOMING_PREFIX + " uplatnica za " + slip.getProviderName() + " (" + slip.getDueDate() + ").";
             notificationService.create(slip.getUser(), slip, message);
-            notifyDevices(slip.getUser().getId(), "Uskoro dospijeva uplatnica", message);
+            notifyDevices(slip.getUser().getId(), "Uskoro dospijeva uplatnica", message, slip.getId());
         }
     }
 
@@ -77,7 +77,7 @@ public class ReminderService {
 
             String message = DUE_TODAY_PREFIX + " uplatnica za " + slip.getProviderName() + ".";
             notificationService.create(slip.getUser(), slip, message);
-            notifyDevices(slip.getUser().getId(), "Uplatnica dospijeva danas", message);
+            notifyDevices(slip.getUser().getId(), "Uplatnica dospijeva danas", message, slip.getId());
         }
     }
 
@@ -93,7 +93,7 @@ public class ReminderService {
 
             String message = OVERDUE_PREFIX + " uplatnica za " + slip.getProviderName() + " (rok " + slip.getDueDate() + ").";
             notificationService.create(slip.getUser(), slip, message);
-            notifyDevices(slip.getUser().getId(), "Uplatnica je dospjela", message);
+            notifyDevices(slip.getUser().getId(), "Uplatnica je dospjela", message, slip.getId());
         }
     }
 
@@ -121,17 +121,17 @@ public class ReminderService {
             String message = "Uskoro se očekuje uplatnica za " + pattern.getProviderName()
                     + " (procjena " + pattern.getNextPredictedDate() + ").";
             notificationService.create(pattern.getUser(), null, message);
-            notifyDevices(pattern.getUser().getId(), "Očekivana uplatnica", message);
+            notifyDevices(pattern.getUser().getId(), "Očekivana uplatnica", message, null);
 
             pattern.setLastReminderSentAt(today);
             recurringPatternRepository.save(pattern);
         }
     }
 
-    private void notifyDevices(Long userId, String title, String body) {
+    private void notifyDevices(Long userId, String title, String body, Long paymentSlipId) {
         List<UserDevice> devices = userDeviceRepository.findByUserId(userId);
         if (!devices.isEmpty()) {
-            expoPushService.sendToDevices(devices, title, body);
+            expoPushService.sendToDevices(devices, title, body, paymentSlipId);
         }
     }
 }

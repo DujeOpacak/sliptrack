@@ -34,7 +34,13 @@ export function CategoriesPage() {
 
   useEffect(() => {
     loadCategories();
-    categoryApi.getSubCategories().then(setAllSubCategories).catch(() => {});
+    // Unlike refreshAllSubCategories() (called after CRUD, where stale-for-a-beat is fine
+    // since another mutation will retry it), a failure here has no other trigger to retry —
+    // silently swallowing it would leave subcategory-name search broken for the whole session.
+    categoryApi
+      .getSubCategories()
+      .then(setAllSubCategories)
+      .catch((err) => showToast(extractErrorMessage(err, "Pretraga potkategorija nije dostupna")));
   }, []);
 
   async function loadCategories() {

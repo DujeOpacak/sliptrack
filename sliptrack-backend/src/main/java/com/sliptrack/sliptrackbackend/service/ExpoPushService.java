@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,26 +17,33 @@ public class ExpoPushService {
 
     private final RestClient restClient = RestClient.create();
 
-    public void sendToDevices(List<UserDevice> devices, String title, String body) {
+    public void sendToDevices(List<UserDevice> devices, String title, String body, Long paymentSlipId) {
         for (UserDevice device : devices) {
-            sendToToken(device.getDeviceToken(), title, body);
+            sendToToken(device.getDeviceToken(), title, body, paymentSlipId);
         }
     }
 
-    private void sendToToken(String deviceToken, String title, String body) {
+    private void sendToToken(String deviceToken, String title, String body, Long paymentSlipId) {
         try {
+            Map<String, Object> payload = new HashMap<>(Map.of(
+                    "to", deviceToken,
+                    "title", title,
+                    "body", body,
+                    "sound", "default",
+                    // Bez ovoga Android FCM koristi generički fcm_fallback_notification_channel
+                    // (IMPORTANCE_DEFAULT, bez heads-up banera) umjesto app-ovog "default" kanala
+                    // (IMPORTANCE_HIGH), koji registerPushToken.ts kreira upravo za tu svrhu.
+                    "channelId", "default"
+            ));
+            // Lets the mobile app deep-link straight to the relevant slip on tap (NotificationContext's
+            // response listener) — omitted for the "predicted" reminder case, which has no slip yet.
+            if (paymentSlipId != null) {
+                payload.put("data", Map.of("paymentSlipId", paymentSlipId));
+            }
+
             String response = restClient.post()
                     .uri(EXPO_PUSH_URL)
-                    .body(Map.of(
-                            "to", deviceToken,
-                            "title", title,
-                            "body", body,
-                            "sound", "default",
-                            // Bez ovoga Android FCM koristi generički fcm_fallback_notification_channel
-                            // (IMPORTANCE_DEFAULT, bez heads-up banera) umjesto app-ovog "default" kanala
-                            // (IMPORTANCE_HIGH), koji registerPushToken.ts kreira upravo za tu svrhu.
-                            "channelId", "default"
-                    ))
+                    .body(payload)
                     .retrieve()
                     .body(String.class);
 

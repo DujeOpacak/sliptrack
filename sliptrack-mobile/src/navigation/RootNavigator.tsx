@@ -13,6 +13,7 @@ import AddChoiceScreen from "../screens/app/AddChoiceScreen";
 import ScanScreen from "../screens/app/ScanScreen";
 import OcrScanScreen from "../screens/app/OcrScanScreen";
 import NotificationListScreen from "../screens/app/NotificationListScreen";
+import { navigationRef } from "./navigationRef";
 import type { AuthStackParamList, AppStackParamList } from "./types";
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
@@ -89,7 +90,7 @@ export default function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer ref={navigationRef}>
       {user ? <AppNavigator /> : <AuthNavigator />}
     </NavigationContainer>
   );

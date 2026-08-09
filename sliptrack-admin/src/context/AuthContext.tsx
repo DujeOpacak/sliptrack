@@ -61,8 +61,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (response.role !== "ADMIN") {
       tokenStore.setAccessToken(null);
       // Backend already set the refresh cookie for this (non-admin) session
-      // before the role check happened here — clear it explicitly.
-      await authApi.logout();
+      // before the role check happened here — clear it explicitly. Best-effort:
+      // a transient failure here shouldn't mask the real "not an admin" error below.
+      try {
+        await authApi.logout();
+      } catch {
+        // ignore — worst case the cookie lingers until it naturally expires
+      }
       throw new Error("Ovaj račun nema administratorska prava");
     }
     tokenStore.setAccessToken(response.accessToken);

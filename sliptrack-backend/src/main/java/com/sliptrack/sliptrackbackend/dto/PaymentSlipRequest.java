@@ -19,6 +19,14 @@ public class PaymentSlipRequest {
     @Pattern(regexp = "HR\\d{19}", message = "IBAN mora biti u hrvatskom formatu (HR + 19 znamenki)")
     private String iban;
 
+    // Normalizes on the way in (strip whitespace, uppercase) before @Pattern validates —
+    // matches mobile's own iban.replace(/\s+/g, "").toUpperCase() normalization, but applies
+    // it server-side too so any client (including old records re-submitted unchanged via PUT)
+    // gets the same tolerance instead of being blocked by incidental formatting.
+    public void setIban(String iban) {
+        this.iban = iban == null ? null : iban.replaceAll("\\s+", "").toUpperCase();
+    }
+
     @NotNull
     @DecimalMin(value = "0.0", inclusive = false)
     private BigDecimal amount;

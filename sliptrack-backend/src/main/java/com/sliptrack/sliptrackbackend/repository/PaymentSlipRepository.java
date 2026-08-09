@@ -1,15 +1,15 @@
 package com.sliptrack.sliptrackbackend.repository;
 
-import com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse;
-import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.CategoryAmountResponse;
 import com.sliptrack.sliptrackbackend.dto.ProviderAmountResponse;
 import com.sliptrack.sliptrackbackend.enums.PaymentStatus;
+import com.sliptrack.sliptrackbackend.model.Category;
 import com.sliptrack.sliptrackbackend.model.PaymentSlip;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -34,12 +34,20 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
 
     boolean existsBySubCategoryIdAndPropertyIsNotNull(Long subCategoryId);
 
+    // ReminderService/RecurringPatternService only touch .getId()/pass-through today, but the
+    // LAZY `user` association must be structurally guaranteed here (not left to caller @Transactional
+    // discipline) per the project's own EntityGraph convention — see CLAUDE.md's
+    // LazyInitializationException section.
+    @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByStatusAndDueDateBetween(PaymentStatus status, LocalDate from, LocalDate to);
 
+    @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByStatusAndDueDate(PaymentStatus status, LocalDate dueDate);
 
+    @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByStatusAndDueDateBefore(PaymentStatus status, LocalDate dueDate);
 
+    @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByUserIdAndProviderNameOrderByDueDateAsc(Long userId, String providerName);
 
     boolean existsByUserIdAndProviderNameAndDueDateBetween(
@@ -83,22 +91,9 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
             """, nativeQuery = true)
     List<Object[]> sumAmountGroupedByMonth(@Param("userId") Long userId);
 
-    @Query("""
-            SELECT new com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse(
-                p.category.id, p.category.name, COUNT(p))
-            FROM PaymentSlip p
-            GROUP BY p.category.id, p.category.name
-            ORDER BY COUNT(p) DESC
-            """)
-    List<AdminCategoryCountResponse> countGroupedByCategory();
-
-    @Query("""
-            SELECT new com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse(
-                p.subCategory.id, p.subCategory.name, p.category.id, COUNT(p))
-            FROM PaymentSlip p
-            WHERE p.subCategory IS NOT NULL
-            GROUP BY p.subCategory.id, p.subCategory.name, p.category.id
-            ORDER BY COUNT(p) DESC
-            """)
-    List<AdminSubCategoryCountResponse> countGroupedBySubCategory();
+    // Keeps PaymentSlip.category (recorded at creation) in sync with subCategory.category
+    // when a SubCategory is moved to a different Category — see SubCategoryService.update().
+    @Modifying
+    @Query("UPDATE PaymentSlip p SET p.category = :category WHERE p.subCategory.id = :subCategoryId")
+    void reassignCategoryForSubCategory(@Param("subCategoryId") Long subCategoryId, @Param("category") Category category);
 }

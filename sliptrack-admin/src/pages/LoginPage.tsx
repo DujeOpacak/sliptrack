@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { extractErrorMessage } from "../api/errors";
 import styles from "./LoginPage.module.css";
 
 export function LoginPage() {
@@ -23,10 +24,7 @@ export function LoginPage() {
       await login(email, password);
       navigate("/", { replace: true });
     } catch (err) {
-      const message =
-        (err as { response?: { data?: { message?: string } }; message?: string })
-          ?.response?.data?.message ?? (err as Error)?.message ?? "Prijava nije uspjela";
-      setError(message);
+      setError(extractErrorMessage(err, "Prijava nije uspjela"));
     } finally {
       setIsSubmitting(false);
     }

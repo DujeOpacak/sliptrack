@@ -1,8 +1,10 @@
 package com.sliptrack.sliptrackbackend.repository;
 
+import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.model.SubCategory;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,4 +25,15 @@ public interface SubCategoryRepository extends JpaRepository<SubCategory, Long> 
 
     @EntityGraph(attributePaths = "category")
     List<SubCategory> findByCategoryId(Long categoryId);
+
+    // LEFT JOIN driven from SubCategory (not PaymentSlip) so subcategories with zero
+    // slips still appear with count=0 — same "pun popis" reasoning as CategoryRepository.countGroupedByCategory().
+    @Query("""
+            SELECT new com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse(
+                s.id, s.name, s.category.id, COUNT(p))
+            FROM SubCategory s LEFT JOIN PaymentSlip p ON p.subCategory = s
+            GROUP BY s.id, s.name, s.category.id
+            ORDER BY COUNT(p) DESC, s.name
+            """)
+    List<AdminSubCategoryCountResponse> countGroupedBySubCategory();
 }

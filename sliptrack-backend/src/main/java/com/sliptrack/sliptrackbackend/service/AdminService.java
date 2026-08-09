@@ -5,7 +5,9 @@ import com.sliptrack.sliptrackbackend.dto.AdminStatsResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse;
 import com.sliptrack.sliptrackbackend.dto.AdminUserResponse;
 import com.sliptrack.sliptrackbackend.model.User;
+import com.sliptrack.sliptrackbackend.repository.CategoryRepository;
 import com.sliptrack.sliptrackbackend.repository.PaymentSlipRepository;
+import com.sliptrack.sliptrackbackend.repository.SubCategoryRepository;
 import com.sliptrack.sliptrackbackend.repository.UserRepository;
 import com.sliptrack.sliptrackbackend.security.CurrentUserService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +23,8 @@ public class AdminService {
 
     private final UserRepository userRepository;
     private final PaymentSlipRepository paymentSlipRepository;
+    private final CategoryRepository categoryRepository;
+    private final SubCategoryRepository subCategoryRepository;
     private final CurrentUserService currentUserService;
 
     public List<AdminUserResponse> getAllUsers() {
@@ -53,16 +57,16 @@ public class AdminService {
                 .totalUsers(userRepository.count())
                 .activeUsers(userRepository.countByActiveTrue())
                 .totalPaymentSlips(paymentSlipRepository.count())
-                .topCategories(paymentSlipRepository.countGroupedByCategory().stream().limit(5).toList())
+                .topCategories(categoryRepository.countGroupedByCategory().stream().limit(5).toList())
                 .build();
     }
 
     public List<AdminCategoryCountResponse> getCategoryCounts() {
-        return paymentSlipRepository.countGroupedByCategory();
+        return categoryRepository.countGroupedByCategory();
     }
 
     public List<AdminSubCategoryCountResponse> getSubCategoryCounts() {
-        return paymentSlipRepository.countGroupedBySubCategory();
+        return subCategoryRepository.countGroupedBySubCategory();
     }
 
     private User findUserOrThrow(Long id) {
