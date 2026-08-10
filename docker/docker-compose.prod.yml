@@ -11,8 +11,12 @@ services:
       - postgres_data:/var/lib/postgresql
     networks:
       - internal
-    # Namjerno bez "ports:" — Postgres nije javno dohvatljiv, samo preko interne Docker
-    # mreže (backend mu pristupa po imenu servisa "postgres", ne po localhost/IP-u).
+    ports:
+      - "127.0.0.1:5432:5432"
+    # Mapirano SAMO na 127.0.0.1 VPS-a (ne "0.0.0.0") — i dalje nedohvatljivo s interneta,
+    # samo preko SSH tunela na sam VPS (npr. DBeaver-ov ugrađen SSH tunnel). Backend i dalje
+    # pristupa preko interne Docker mreže po imenu servisa "postgres", ovo je samo za ručni
+    # GUI pristup administratora.
 
   minio:
     image: minio/minio
@@ -26,9 +30,11 @@ services:
       - minio_data:/data
     networks:
       - internal
-    # Isto bez "ports:" — MinIO S3 API izlazi javno isključivo preko nginx reverse proxyja
-    # (port 9443, vidi nginx servis niže), ne izravno na 9000. Konzola (9001) se ne izlaže
-    # uopće u produkciji.
+    ports:
+      - "127.0.0.1:9001:9001"
+    # S3 API (9000) izlazi javno isključivo preko nginx reverse proxyja (port 9443, vidi
+    # nginx servis niže), ne izravno. Konzola (9001) mapirana SAMO na 127.0.0.1 VPS-a — ne
+    # javno dohvatljiva, samo preko SSH tunela za ručni administratorski pristup.
 
   backend:
     build:
