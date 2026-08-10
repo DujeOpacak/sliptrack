@@ -938,4 +938,66 @@ Sutra
 
 Rebuild + retest headerBackButtonDisplayMode popravka (i ovog mojibake popravka zajedno) — korisnik će sam pokrenuti eas build
 Hetzner VPS kreiranje dovršiti, DuckDNS IP ažurirati, bootstrap nginx → Certbot → finalni SSL config
+
+11.08.2026 — Deployment: Hetzner VPS produkcija live, poglavlje 4.6 gotovo
+
+Što je napravljeno
+
+CX23 plan ("Cost-Optimized", 2 vCPU/4GB, €6.86/mj) postao dostupan na Hetzneru (ranija nedostupnost bila privremena) — odabran umjesto skupljeg CPX22, iste specifikacije
+Server kreiran: Nuremberg, x86, Ubuntu 24.04, sliptrack_vps SSH ključ, bez Volumes/Backups/Placement group/Labels (svi svjesno preskočeni — obrazloženo korisniku zašto nisu potrebni za ovaj opseg)
+Cloud-init skripta za auto-instalaciju Dockera nikad prije nije bila spremljena u repo (samo dogovorena riječima 09.-10.08) — napisana i commitana kao docker/cloud-init.yaml, zalijepljena u Hetznerov "Cloud config" korak
+Firewall kreiran i primijenjen: inbound 22/80/443/9443, outbound allow all
+DuckDNS IP ažuriran na stvarni server IP (159.69.114.217)
+SSH veza uspostavljena s Windows računala (ugrađen OpenSSH klijent), objašnjeno korisniku pojam SSH ključa i razlika lokalni-vs-udaljeni terminal
+Docker (29.7.2) + Compose plugin (v5.4.0) potvrđeni instalirani preko cloud-init pri prvom bootu
+GitHub Deploy Key generiran na VPS-u (~/.ssh/github_deploy, read-only), dodan na GitHub repo, ~/.ssh/config konfiguriran (prvi pokušaj imao typo "IdentitesOnly" umjesto "IdentitiesOnly", ispravljeno)
+Repo kloniran (git clone preko SSH-a) — otkriveno da je default branch (main) skoro prazan scaffold (samo .gitignore/README/CLAUDE.md/DEVLOG.md), sav stvaran kod je na dev branchu; riješeno git checkout dev
+.env kreiran iz .env.example, lozinke i JWT secret generirani preko openssl rand -base64
+Node.js 22 instaliran (NodeSource repo) da se admin builda na VPS-u — nema Dockerfile za admin, docker-compose.prod.yml direktno bind-mounta sliptrack-admin/dist, build mora postojati na disku prije nego nginx kontejner uopće starta; potvrđeno .env.production prisutan (raniji .gitignore popravak od 10.08 se pokazao ispravnim), npm ci && npm run build uspješan
+
+Bug #1 — mvnw bez executable bita (Linux build pao s exit code 126)
+
+Prvi docker compose up -d --build backend pao na RUN ./mvnw dependency:go-offline -B s exit code 126
+Dijagnosticirano: mvnw nema +x bit jer je repo originalno rađen na Windowsu (git je spremio permission bit onakav kakav je bio na Windows filesystemu, koji ne prati Unix izvršne dozvole)
+Popravljeno na VPS-u (chmod +x mvnw) i trajno u gitu (git update-index --chmod=+x — na lokalnom Windows računalu, jer chmod ne postoji na NTFS-u ali git podržava direktnu izmjenu moda u indexu)
+
+Bootstrap nginx → Certbot → finalni SSL flow
+
+Sadržaj conf.d/app.conf privremeno zamijenjen bootstrap verzijom (samo HTTP, ACME challenge lokacija) jer docker-compose.prod.yml hardkodirano mounta conf.d/ putanju, ne postoji lak način zamijeniti cijeli folder bez izmjene compose fajla
+postgres+minio+backend+nginx podignuti, curl http://sliptrack.duckdns.org potvrdio bootstrap radi i DNS je ispravan
+Backend odmah pao u restart petlji (SSLHandshakeException prema MinIO endpointu na 9443) — očekivano, bootstrap nginx još ne servira TLS na tom portu; backend privremeno zaustavljen (nije potreban za Certbot korak, koji komunicira samo s nginxom na portu 80)
+Certifikat izvučen: docker compose run --rm --entrypoint certbot certbot certonly --webroot ... — prvi pokušaj bez --entrypoint override je tiho pao jer certbot servis u compose fajlu ima hardkodiran custom entrypoint (petlja koja uvijek zove samo "certbot renew", potpuno ignorira proslijeđenu komandu), ispravljeno eksplicitnim overrideom
+Finalni SSL config vraćen, nginx restartan — pao s "host not found in upstream 'backend'" jer backend još nije bio ponovno pokrenut (nginx razrješava upstream hostname pri startu, ne dinamički); backend podignut prvo, pa nginx restartan ponovno — uspjeh
+
+Bug #2 — nginx Host header skidao port, MinIO odbijao potpis (SignatureDoesNotMatch)
+
+Backend nakon podizanja pao na Failed to instantiate MinioClient: SignatureDoesNotMatch pri provjeri/kreiranju bucketa
+Dijagnosticirano iz stack tracea: backendov MinIO klijent šalje zahtjev s Host: sliptrack.duckdns.org:9443 (potpisuje S3 zahtjev protiv punog endpointa s portom, jer je MINIO_ENDPOINT eksplicitno postavljen s :9443), ali nginxov proxy_set_header Host $host; skida port prije prosljeđivanja MinIO kontejneru — MinIO provjerava potpis protiv Host headera koji stvarno primi, koji se više ne poklapa s onim protiv kojeg je klijent potpisao
+Popravljeno: $host → $http_host (nginx varijabla koja zadržava port ako ga je klijent poslao) u oba proxy bloka (/api/ i MinIO 9443, radi konzistentnosti) — primijenjeno ručno na VPS-u pa preneseno u repo (docker/nginx/conf.d/app.conf)
+Backend restartan, ovaj put uspješno pokrenut — Hibernate/HikariCP/Tomcat/@Scheduled reminder job svi čisto inicijalizirani
+
+Prvi admin račun i finalna provjera
+
+Admin registracija namjerno nema API endpoint (po dizajnu) — prvi korisnik registriran preko POST /api/auth/register, rola ručno promijenjena preko docker exec -it sliptrack-postgres psql -U sliptrack -d sliptrack + UPDATE users SET role='ADMIN'
+Korisnik potvrdio: login na https://sliptrack.duckdns.org radi, admin sučelje potpuno funkcionalno
+
+Bug #3 — certbot servis bez restart policyja
+
+Korisnik pitao kako provjeriti restart policy svakog kontejnera (docker inspect --format '{{.HostConfig.RestartPolicy.Name}}') — otkriveno da certbot nema restart: definiran u docker-compose.prod.yml (za razliku od preostala četiri servisa), default je "no"; restart servera bi tiho ugasio renewal petlju, certifikat bi za 90 dana istekao bez upozorenja
+Popravljeno dodavanjem restart: unless-stopped — fix napravljen lokalno ali prvi put zaboravljen commitati prije nego je korisnik na VPS-u pokušao git pull (otkriveno kad je certbot i dalje pokazivao "no" nakon pull-a), popravljeno zasebnim commitom
+Dodatni gotcha usput: promjena restart: policyja u compose fajlu ne triggera automatski recreate postojećeg kontejnera na obični docker compose up -d (compose ne uzima tu promjenu u obzir pri odluci treba li recreate) — trebao je eksplicitan --force-recreate
+Git workflow gotcha (ponovio se dvaput): server ima lokalne izmjene u nginx/conf.d/app.conf (ručni sed koji popunjava stvarnu domenu preko CHANGE_ME.duckdns.org placeholdera iz repoa) koje se sudaraju sa svakim git pull — riješeno obrascem git stash → git pull → ponovni sed → git stash drop
+
+Zaključeno
+
+Svih 5 kontejnera (postgres/minio/backend/nginx/certbot) rade s restart: unless-stopped, HTTPS radi, admin login radi, Let's Encrypt certifikat izdan s aktivnom auto-renewal petljom
+Svi popravci (nginx Host header, mvnw executable bit, cloud-init.yaml, certbot restart policy) commitani i pushani na dev branch (dva commita)
+Poglavlje 4.6 (kontejnerizacija i produkcijsko okruženje) time gotovo — aplikacija je live i demonstrabilna neovisno o laptopu/lokalnoj mreži
+CLAUDE.md i DEVLOG.md ažurirani
+
+Sutra
+
+5.1 (strategija testiranja) tekst za rad i dalje čeka — jedino preostalo prije pisanja/finalizacije rada
+Rebuild + retest headerBackButtonDisplayMode + mojibake popravaka na iPhoneu (korisnik će sam pokrenuti eas build)
+Razmotriti treba li mobile production build gađati https://sliptrack.duckdns.org/api umjesto localhost/LAN IP-a za demo na obrani
 5.1 (strategija) tekst za rad i dalje čeka
