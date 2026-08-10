@@ -15,8 +15,6 @@
 hs_err_pid*
 replay_pid*
 target/
-.mvn/
-!.mvn/wrapper/maven-wrapper.jar
 
 # ========================
 # IntelliJ IDEA
@@ -40,6 +38,10 @@ build/
 .env
 .env.local
 .env.production
+# Iznimka: sliptrack-admin/.env.production ne sadrži tajnu (samo VITE_API_BASE_URL=/api,
+# build-time konstanta za produkcijski API put) — mora biti u gitu da svježe klonirani
+# repo (npr. na VPS-u) ispravno buildа admin s relativnim /api putem, ne dev fallbackom.
+!sliptrack-admin/.env.production
 
 # ========================
 # React Admin

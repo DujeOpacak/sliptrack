@@ -397,7 +397,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
             key={route.key}
             value={draftPaidAt}
             mode="date"
-            maximumDate={new Date()}
+            maximumDate={today}
             onChange={handlePaidAtChange}
           />
           {Platform.OS === "ios" && (

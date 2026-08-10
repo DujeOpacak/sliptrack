@@ -1,0 +1,96 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: sliptrack-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - internal
+    # Namjerno bez "ports:" — Postgres nije javno dohvatljiv, samo preko interne Docker
+    # mreže (backend mu pristupa po imenu servisa "postgres", ne po localhost/IP-u).
+
+  minio:
+    image: minio/minio
+    container_name: sliptrack-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - internal
+    # Isto bez "ports:" — MinIO S3 API izlazi javno isključivo preko nginx reverse proxyja
+    # (port 9443, vidi nginx servis niže), ne izravno na 9000. Konzola (9001) se ne izlaže
+    # uopće u produkciji.
+
+  backend:
+    build:
+      context: ../sliptrack-backend
+    container_name: sliptrack-backend
+    restart: unless-stopped
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      JWT_SECRET: ${JWT_SECRET}
+      MINIO_ENDPOINT: https://${DUCKDNS_DOMAIN}:9443
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      MINIO_BUCKET: payment-slip-images
+      # Admin i backend dijele istu domenu u produkciji (razdvojeni po putu, ne poddomeni —
+      # vidi nginx config) pa su tehnički "same-origin" iz preglednikove perspektive; CORS
+      # ovdje ostaje netaknut samo kao sigurnosna mreža, ne kao aktivno potreban mehanizam.
+      APP_CORS_ALLOWED_ORIGINS: https://${DUCKDNS_DOMAIN}
+      APP_COOKIE_SECURE: "true"
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - internal
+    # Bez "ports:" — backend je dohvatljiv izvana isključivo preko nginxa (/api/... na 443),
+    # nikad izravno na 8080.
+
+  nginx:
+    image: nginx:alpine
+    container_name: sliptrack-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "9443:9443"
+    volumes:
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ../sliptrack-admin/dist:/var/www/admin:ro
+      - certbot_www:/var/www/certbot:ro
+      - certbot_certs:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+      - minio
+    networks:
+      - internal
+
+  # Automatska obnova Let's Encrypt certifikata (traju 90 dana) — provjerava svakih 12h,
+  # certbot sam odbija obnovu ako certifikat još nije blizu isteka.
+  certbot:
+    image: certbot/certbot
+    container_name: sliptrack-certbot
+    volumes:
+      - certbot_www:/var/www/certbot
+      - certbot_certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+  minio_data:
+  certbot_www:
+  certbot_certs:

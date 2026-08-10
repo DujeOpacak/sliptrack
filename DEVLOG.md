@@ -818,3 +818,124 @@ Sutra
 Vratiti reminder.cron na 0 0 8 * * * ako korisnik to još nije napravio
 Deployment (poglavlje 4.6) — VPS s Docker Compose, odluka o hostingu i dalje otvorena
 iOS fizičko testiranje i dalje otvoreno (čeka Apple Developer Program račun)
+
+09.-10.08.2026 — Deployment priprema (Dockerfile, docker-compose.prod.yml, nginx, lokalni dry-run) + Hetzner/DuckDNS/Apple Developer u tijeku
+
+Što je napravljeno
+
+Korisnik pitao je li pametnije prvo testovi ili deployment — preporučeno testovi prvo (upravo dovršeni), deployment kao sljedeći veći korak
+Konkretan plan za deployment dogovoren: Docker (obavezno po obrascu rada) + VPS + besplatna domena. Korisnik pitao može li se koristiti default Vercel/Render domena — objašnjeno da je to već ranije razmotreno i odbačeno (odstupa od Docker infrastrukture, cold-start free tier), Vercel dodatno neprikladan (serverless/statični hosting). Predložena alternativa: DuckDNS besplatan poddomen + Let's Encrypt, korisnik prihvatio uz napomenu da ovo nije za stvarnu produkciju s korisnicima, samo za obranu rada
+
+Dockerfile + docker-compose.prod.yml + nginx (prvi prolaz, pogrešna pretpostavka)
+
+sliptrack-backend/Dockerfile (multi-stage, mvnw, non-root runtime user) + .dockerignore — build lokalno testiran, uspješan (~1.5min, 640MB)
+application.properties prepisan da čita produkcijske vrijednosti iz ${ENV_VAR:default} placeholdera (datasource, jwt.secret, minio.*, cors, cookie.secure) — default = trenutna dev vrijednost, lokalni rad bez env varijabli nepromijenjen
+Prvi prolaz arhitekture: 3 DuckDNS poddomene (api./admin./minio.) — korisnik pitao ima li DuckDNS wildcard opciju jer je nije vidio u sučelju; provjereno WebSearch-om (ne nagađano) — DuckDNS NE podržava poddomene poddomena na besplatnom planu, ranija tvrdnja o "wildcard checkboxu" bila netočna, priznato i ispravljeno korisniku
+Arhitektura pivotirana na JEDNU domenu s razdvajanjem po putu/portu: admin na "/", backend na "/api/" (bez rewriting jer Spring rute već pod /api/...), MinIO na zasebnom portu 9443 (isti cert, MinIO mora biti javno dohvatljiv jer se presigned URL-ovi potpisuju izravno protiv njega). Bonus: admin+backend same-origin u produkciji, CORS više nije aktivno potreban (ostaje kao sigurnosna mreža)
+nginx/conf.d/app.conf (finalni, SSL) + nginx/conf.d-bootstrap/app.conf (privremeni HTTP-only za prvi Certbot HTTP-01 prolaz prije nego certifikat postoji — jaje-kokoš problem eksplicitno objašnjen)
+docker/.env.example (predložak tajni) — docker-compose.prod.yml validiran (docker compose config) nakon svake izmjene
+
+Usput otkrivena i popravljena dva prava buga
+
+.gitignore je blanket-ignorirao .mvn/ (uklj. maven-wrapper.properties) — svježe kloniranje na VPS bi slomilo mvnw jer ne bi znao koju Maven verziju preuzeti. Ispravljeno, .mvn/wrapper/maven-wrapper.properties sad ulazi u git
+sliptrack-admin/src/api/config.ts hardkodiran na http://localhost:8080/api — u produkciji bi svaki poziv iz admin builda išao na posjetiteljev vlastiti localhost. Popravljeno preko Vite build-time env (VITE_API_BASE_URL, .env.production="/api" jer su admin+backend sad same-origin), src/vite-env.d.ts dodan za tipizaciju, dev fallback netaknut
+
+Lokalni dry-run cijelog stacka
+
+Korisnik pitao što raditi dok čeka (do 2 dana) na GitHub Student Pack odluku — predložena dva neovisna zadatka: lokalni dry-run produkcijskog stacka i pisanje 5.1 teksta; korisnik odabrao dry-run
+npm run build za admin uspio, provjereno grepom da je "/api" ušao u bundle (ne stari localhost:8080)
+docker compose -f docker-compose.prod.yml up postgres+minio+backend (bez nginxa/TLS-a, to zahtijeva pravu internet-dohvatljivu domenu za Let's Encrypt) — otkriven i ODMAH riješen ozbiljan operativni gotcha: dev i prod compose fajlovi dijele container_name (sliptrack-postgres/sliptrack-minio), pokretanje prod compose-a iz istog direktorija "preuzelo" je dev kontejnere (Compose ih tretira kao isti projekt), maknulo im port mapiranja (prod namjerno nema ports: za Postgres/MinIO). Odmah dijagnosticirano i popravljeno (docker compose -f docker-compose.yml up -d vratio port mapiranja, isti named volume pa nula gubitka podataka — provjereno SELECT count(*) prije/poslije, 9 payment_slips netaknuto)
+Drugi gotcha: test .env s novom lozinkom (testpass123) nije radio jer Postgres inicijalizira user/lozinku samo pri PRVOM pokretanju praznog data direktorija — postojeći dev volumen već ima sliptrack123. Riješeno usklađivanjem test .env lozinke s postojećom, ne mijenjanjem podataka
+Treći gotcha (očekivan, ne bug): MINIO_ENDPOINT u produkcijskom configu cilja :9443 (kroz nginx), test bez nginxa nije mogao spojiti — testirano privremeno s izravnim internim minio:9000 endpointom (docker compose run -e override) da se izolira i potvrdi Postgres+backend+MinIO wiring odvojeno od nginx/TLS pitanja
+Nakon svih popravaka: backend potpuno startao, /api/auth/register vratio valjan JWT (potpisan env-based JWT_SECRET-om), /api/categories bez tokena ispravno 401 — cijeli produkcijski env-var wiring potvrđen ispravan
+Sve testno počišćeno: test korisnik obrisan iz baze, test kontejneri/slike uklonjeni, dev okruženje vraćeno i verificirano (portovi, 9 payment_slips netaknuto)
+Ono što NIJE testirano lokalno (ne može se): nginx reverse proxy + pravi TLS certifikat — zahtijeva stvarnu internet-dohvatljivu domenu za Let's Encrypt HTTP-01 provjeru, prvi put će se stvarno testirati na VPS-u
+
+Hetzner + DuckDNS + GitHub Student Pack + Apple Developer (paralelno, korisnikova akcija)
+
+SSH ključ generiran (~/.ssh/sliptrack_vps, ed25519) i predan korisniku za Hetzner/DigitalOcean SSH Key polje
+Korisnik proveden kroz Hetzner signup + server kreiranje (Location Falkenstein/Nürnberg, Ubuntu 24.04 LTS ne 26.04, cloud-init skripta za auto-instalaciju Dockera na prvom bootu) i DuckDNS (domena "sliptrack.duckdns.org" registrirana, IP ažuriranje ručno jer je Hetzner IP statičan)
+Hetznerov CX22 preimenovan u CX23 otkad je model zadnje poznat (linija reorganizirana u "Cost-Optimized"/"Regular Performance"/"General Purpose" tabove) — korisnik prijavio da CX23 (Cost-Optimized) trenutno nedostupan, prešli na CPX22 (Regular Performance, 2vCPU/4GB, €24.36/mj) umjesto jeftinijeg CPX12 (1vCPU/2GB, rizik OOM-a s Postgres+MinIO+JVM+nginx istovremeno)
+Firewall plan dan (inbound 22/80/443/9443, outbound bez restrikcija) — koraci kroz Hetznerovo sučelje (Inbound Rules/Outbound Rules/Apply to/Name/Labels)
+Korisnik pitao za GitHub Student Pack kao besplatnu alternativu — objašnjeno da GitHub račun s Student Packom ne mora biti isti kao repo račun (samo za identitet/kredit, ne za deployment), ali dobiveni kredit (5€) prekratko traje; DigitalOcean droplet kreiranje objašnjeno paralelno za slučaj da se ipak koristi (Frankfurt regija, 4GB/2vCPU, isti SSH ključ, Cloud Firewall isti obrazac). Pokušaj dodatne aktivacije blokiran identitetskom verifikacijom (X-ica bez datuma) — odustalo se, ide se s plaćenim Hetznerom
+Korisnik pitao opću stvar — "što je VPS općenito i koristi li se u praksi" — objašnjeno (virtualizacija, usporedba sa shared hosting/dedicated/PaaS, stvarna industrijska upotreba)
+Korisnik pitao kako pristupiti bazi kao admin ako Postgres nije javno izložen — objašnjena dva pristupa: docker exec psql izravno na VPS-u preko SSH-a (brzi ad-hoc upiti, isti obrazac kao ranije korišten za recurring_patterns debug), SSH tunnel (-L 5432:localhost:5432) za GUI alate (DBeaver/pgAdmin) — Postgres ostaje potpuno interni u oba slučaja
+Korisnik odlučio paralelno pokrenuti Apple Developer Program prijavu (Individual, $99/god) dok čeka VPS odluke — plaćeno 10.08.2026, čeka aktivacijski email (do 48h). Eksplicitno upozoren da plaćen račun NIJE garancija bezbrižnog testiranja — iOS grana koda nikad fizički testirana, realno očekivanje 1-2 kruga dijagnoze kao kod Android push sage
+CLAUDE.md i DEVLOG.md ažurirani s punim stanjem deployment pripreme
+
+Sutra
+
+Nastaviti Hetzner server kreiranje (CPX22, Ubuntu 24.04, cloud-init, firewall) do kraja, ažurirati DuckDNS IP kad server bude gotov
+SSH na VPS, provjeriti Docker auto-instaliran preko cloud-init, git clone repoa, postaviti pravi .env (jake lozinke, generiran JWT_SECRET preko openssl rand -base64 64)
+Bootstrap nginx config → Certbot prvi certifikat → prebacivanje na finalni SSL config
+Apple Developer aktivacija (čeka se email) → EAS credentials za iOS → fizičko testiranje na uređaju
+5.1 (strategija) tekst za rad i dalje čeka
+
+10.08.2026 — Apple Developer aktiviran, prvo fizičko iOS testiranje (uspješno), dva stvarna buga otkrivena i popravljena
+
+Što je napravljeno
+
+Korisnik dobio Apple Developer aktivacijski email i aktivirao račun (Individual, $99/god) — brže od najavljena 48h
+app.json nije imao ios.bundleIdentifier (samo android.package postojao) — EAS build bi pao bez njega; dodano com.dujeopacak.sliptrackmobile (isti kao Android package, dosljedna konvencija)
+Korisnik proveden kroz cijeli EAS iOS flow uživo, korak po korak kako je nailazio na promptove: eas device:create (Apple ID prijava, 2FA, "Website" metoda registracije uređaja — jedina opcija bez Maca/Apple Silicon), eas build --platform ios --profile preview (export compliance pitanje odgovoreno Y — app koristi samo standardnu HTTPS/SecureStore enkripciju, novi Distribution Certificate generiran, Push Notifications capability postavljen — EAS je pritom auto-dodao ios.infoPlist.ITSAppUsesNonExemptEncryption: false u app.json)
+Korisnik zbunjen oko "npx ios start" (ne postoji taj koncept) — razjašnjeno da preview profil gradi samostalnu app, ne treba dev server/Metro nakon instalacije, za razliku od development profila
+Prvi build završen i instaliran — trebao Developer Mode uključiti ručno na iPhoneu (Settings → Privacy & Security → Developer Mode → restart → Turn On), objašnjeno kao standardan iOS 16+ sigurnosni korak
+Dane konkretne dueDate vrijednosti za testiranje sva 4 tipa podsjetnika na iOS-u (isti obrazac kao Android test ranije, prilagođeno datumu 10.08.2026) — HEP Elektra recurring_pattern ponovno resetiran (DELETE FROM recurring_patterns) jer je dedup već blokirao pattern iz Android testiranja
+Korisnik potvrdio: SVA 4 tipa podsjetnika rade na iOS-u
+
+Dva stvarna buga otkrivena kroz fizičko testiranje
+
+Korisnik tražio rubne slučajeve koje nije testirao — predloženo troje: (1) dodir-na-push deep-link (background i cold-start putanje, tek ovu sesiju implementirano), (2) OCR/Apple Vision (nikad prije testirano ni na jednom iOS-u), (3) DateTimePicker "epoch" bug (popravljen ranije naslijepo, nikad fizički potvrđen)
+Korisnik testirao sva tri — #1 i #2 rade, ali #3 se dogodio JEDNOM pa se nije ponovio (neponovljiv/rijedak)
+Istraženo: pronađen pravi uzrok — PaymentSlipFormScreen.tsx paidAt DateTimePicker imao maximumDate={new Date()} (nova Date referenca svaki render dok je picker otvoren), isti razred buga kao stari value prop bug, ali na drugom mjestu — ovo je TOČNO nalaz #7 iz mobile lova na glupi kod (09.08.2026) koji je korisnik tad svjesno odlučio preskočiti kao "latentan rizik, nizak prioritet". Fizičko testiranje ga je potvrdilo kao stvaran, samo rijedak (samo kad se roditelj re-renderira dok je picker otvoren) — objašnjava zašto se dogodio jednom i nije se ponovio na komandu
+Popravljeno: maximumDate={new Date()} → maximumDate={today} (postojeći memoizirani today iz useMemo, ista referenca kao već ispravan dueDate picker). Provjeren dueDate picker paralelno — već ispravan, koristi today, nema maximumDate uopće
+Novi EAS build pokrenut (Claude izravno kroz Bash u pozadini, --non-interactive, uspješan bez ponovnih promptova jer su kredencijali/encription odgovor već zapamćeni od prvog builda) — korisnik instalirao, potvrdio da se bug više ne pojavlja
+
+Drugi bug prijavljen usput
+
+Korisnik primijetio da na iOS-u back strelica na ekranu Obavijesti ima tekst "AppTabs" pored sebe, na Androidu nema ništa — objašnjeno kao standardna iOS/Android razlika (iOS native stack po defaultu prikazuje naziv PRETHODNE rute kao label pored back chevrona, Android ne) — "AppTabs" cura jer je to interno ime tab-navigator rute (headerShown:false, nema svoj title)
+Popravljeno globalno: AppStack.Navigator screenOptions dobio headerBackButtonDisplayMode: "minimal" — vrijedi za sve trenutne i buduće push (ne-modal) ekrane u stacku, ne samo Notifications, umjesto per-screen headerBackTitle popravka
+Korisnik pitao kako sam pokrenuti build — dane instrukcije (eas build --platform ios --profile preview iz sliptrack-mobile foldera, kredencijali već zapamćeni)
+
+Android emulator OCR/barkod pitanje (usput, nevezano uz iOS)
+
+Korisnik pitao kako testirati OCR i barkod skeniranje na Android Virtual Device — OCR: ista već dokazana metoda (drag-and-drop slike na prozor emulatora → Galerija u appu); barkod: novo objašnjeno — AVD "webcam passthrough" (Device Manager → Edit → Advanced Settings → Camera → Back: Webcam0, cold boot), drži pravu uplatnicu/sliku barkoda ispred stvarne webcam kamere jer ScanScreen koristi živi kamera feed, ne statičnu sliku
+
+Dodatna .gitignore greška otkrivena i popravljena
+
+Korisnik pitao je li CLAUDE.md/DEVLOG.md ažuriran — pritom provjeren git status, otkriven TREĆI primjer istog obrasca kao .mvn/ ranije: sliptrack-admin/.env.production (VITE_API_BASE_URL=/api, build-time konstanta, NE tajna) tiho gitignoriran blanket .env.production pravilom (generički Node/RN gitignore boilerplate koji pretpostavlja da .env.production uvijek sadrži tajne) — svježe kloniran repo na VPS-u bi buildao admin bez tog fajla, pao natrag na dev localhost:8080 fallback, potpuno slomio produkciju. Popravljeno dodavanjem !sliptrack-admin/.env.production iznimke
+
+Sutra
+
+Rebuild + retest headerBackButtonDisplayMode popravka na iPhoneu (korisnik će sam pokrenuti eas build)
+Hetzner VPS kreiranje dovršiti, DuckDNS IP ažurirati, bootstrap nginx → Certbot → finalni SSL config
+5.1 (strategija) tekst za rad i dalje čeka
+
+10.08.2026, nastavak — Hrvatska dijakritika u skeniranom barkodu iskrivljena (Android), otkriven i popravljen treći stvaran bug
+
+Što je napravljeno
+
+Korisnik prijavio: kod skeniranja barkoda s providerName koji sadrži hrvatska slova (npr. "SVEUČILIŠTE ALGEBRA BERNAYS") polje se ne popuni ispravno — pitao može li se ovo testirati kroz postojeće Jest testove
+Objašnjeno zašto ne može direktno: parseHub3.test.ts testira parseHub3Barcode() na string koji JS sam konstruira (uvijek ispravan Unicode) — pravi bug je u native barkod dekoderu (expo-camera/ZXing/MLKit), sloju PRIJE nego JS kod uopće dobije string; naši testovi taj sloj ne dotiču. Provjeren ScanScreen.tsx i expo-camera-in BarcodeScanningResult tip (raw polje postoji ali je Android-only, @hidden, i dalje string ne sirovi bajtovi — nema pristupa charsetu na tom nivou)
+Korisnik dao stvaran zalijepljen console.log (nakon što je proveden kroz postavljanje development EAS builda + Metro da uopće vidi console.log na standalone buildu — prvi eas build --profile development, expo-dev-client auto-instalacija, npx expo start, ručno spajanje na LAN IP jer QR ponekad ne radi)
+Analiziran dosljedan uzorak kvarenja ("Ä" umjesto Č/Ć, "Å " s nevidljivim razmakom umjesto Š) — dijagnosticirano kao klasičan UTF-8-pročitan-kao-Latin-1 mojibake (prvi bajt UTF-8 dvoznaka postane vidljiv Latin-1 znak, drugi bajt ili nestane kao nevidljiv C1 kontrolni znak ili se — u slučaju Š-a — pojavi kao vidljiv razmak jer je 0xA0 u Latin-1 doslovno "non-breaking space")
+Prvi prijedlog rješenja: ručni bajt-po-bajt UTF-8 dekoder (jer TextDecoder nije zagarantiran u Hermes/RN, provjereno grepom kroz react-native paket — nema ga). Korisnik pitao ima li jednostavnija alternativa — predložen i korišten klasičan escape/decodeURIComponent trik (dva reda umjesto ~30), uz guard da se ne dira tekst koji je već izvan Latin-1 raspona (već ispravan Unicode)
+Korisnik tražio da se funkcija drugačije zove — ponuđene opcije, odabrano decodeMisreadUtf8
+Implementirano u parseHub3.ts: decodeMisreadUtf8() primijenjen na raw string prije .split("\n")
+
+Prepreka usput: alat pokvario doslovni znak u fajlu
+
+Tijekom prvog Edit poziva, znak "ÿ" u regexu [^ -ÿ] se pretvorio u NUL bajt (0x00) — otkriveno kad je grep prijavio "binary file matches" i Edit tool prestao pronalaziti string za zamjenu. Dijagnosticirano preko grep -a (force text mode) + xxd hex dump — potvrđen doslovni 0x00 bajt na mjestu razmaka. Dodatni, važniji bug otkriven usput: guard raspon "[^ -ÿ]" kreće tek od razmaka (0x20), pa bi \r\n razdjelnici redaka (0x0A/0x0D, ispod 0x20) uvijek okinuli guard i onemogućili popravak za SVAKI stvaran HUB-3 string. Oboje rijeseno prepisivanjem cijelog fajla cistim ASCII kodom, uz raspon zapisan kao Unicode escape notacija umjesto doslovnih posebnih znakova (izbjegava rizik transkodiranja ubuduce)
+
+Testovi i potvrda
+
+4 nova Jest testa u parseHub3.test.ts — helper corruptAsRealDeviceWould() (unescape(encodeURIComponent(x)), suprotan smjer istog trika) deterministički simulira native bug unutar samog testa bez nagađanja nevidljivih bajtova; regresijski test koristi točno korisnikov stvaran primjer (Sveučilište Algebra Bernays); guard testovi (već-ispravan Unicode se ne dira, čist ASCII se ne dira)
+tsc --noEmit čist, svih 27 testova (3 suite-a) prolazi
+Korisnik rebuildao (development profil) i testirao na stvarnom uređaju — potvrđeno: providerName "SVEUČILIŠTE ALGEBRA BERNAYS", description "Plaćanje po predračunu 36451 Upis", oboje ispravno prije nego što je popravak uopće bio potreban za usporedbu
+CLAUDE.md i DEVLOG.md ažurirani
+
+Sutra
+
+Rebuild + retest headerBackButtonDisplayMode popravka (i ovog mojibake popravka zajedno) — korisnik će sam pokrenuti eas build
+Hetzner VPS kreiranje dovršiti, DuckDNS IP ažurirati, bootstrap nginx → Certbot → finalni SSL config
+5.1 (strategija) tekst za rad i dalje čeka

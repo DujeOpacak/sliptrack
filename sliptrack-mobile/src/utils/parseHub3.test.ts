@@ -1,5 +1,14 @@
 import { parseHub3Barcode } from "./parseHub3";
 
+// Simulira stvarni bug otkriven fizičkim testiranjem na Androidu: ZXing/MLKit unutar
+// expo-camera pročita UTF-8 bajtove hrvatske dijakritike kao zasebne Latin-1 znakove.
+// encodeURIComponent+unescape je suprotan smjer istog trika koji parseHub3.ts koristi
+// za popravak (decodeURIComponent+escape) — pretvara ispravan JS string u niz znakova
+// gdje svaki znak == jedan UTF-8 bajt originala, točno ono što native dekoder vraća.
+function corruptAsRealDeviceWould(correctText: string): string {
+  return unescape(encodeURIComponent(correctText));
+}
+
 function buildHub3(overrides: Partial<Record<number, string>> = {}, lineCount = 14): string {
   const defaults: Record<number, string> = {
     0: "HRVHUB30",
@@ -74,6 +83,39 @@ describe("parseHub3Barcode", () => {
       paymentModel: undefined,
       referenceNumber: undefined,
       description: undefined,
+    });
+  });
+
+  describe("popravak Android mojibake buga (hrvatska dijakritika u UTF-8 pročitana kao Latin-1)", () => {
+    test("regresijski test — stvaran slučaj otkriven fizičkim testiranjem (Sveučilište Algebra Bernays)", () => {
+      const correctProviderName = "SVEUČILIŠTE ALGEBRA BERNAYS";
+      const corrupted = buildHub3({ 6: corruptAsRealDeviceWould(correctProviderName) });
+
+      const result = parseHub3Barcode(corrupted);
+
+      expect(result?.providerName).toBe(correctProviderName);
+    });
+
+    test("ispravlja sve hrvatske dijakritike, malo i veliko slovo", () => {
+      const correctDescription = "Plaćanje po predračunu — čćšžđ ČĆŠŽĐ";
+      const corrupted = buildHub3({ 13: corruptAsRealDeviceWould(correctDescription) });
+
+      const result = parseHub3Barcode(corrupted);
+
+      expect(result?.description).toBe(correctDescription);
+    });
+
+    test("ne dira tekst koji je već ispravan Unicode (npr. iOS koji dekodira ispravno)", () => {
+      const alreadyCorrect = buildHub3({ 6: "SVEUČILIŠTE ALGEBRA BERNAYS" });
+
+      const result = parseHub3Barcode(alreadyCorrect);
+
+      expect(result?.providerName).toBe("SVEUČILIŠTE ALGEBRA BERNAYS");
+    });
+
+    test("ne dira čisto ASCII tekst", () => {
+      const result = parseHub3Barcode(buildHub3({ 6: "HEP ELEKTRA" }));
+      expect(result?.providerName).toBe("HEP ELEKTRA");
     });
   });
 });
