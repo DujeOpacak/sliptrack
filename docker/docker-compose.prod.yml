@@ -81,6 +81,7 @@ services:
   certbot:
     image: certbot/certbot
     container_name: sliptrack-certbot
+    restart: unless-stopped
     volumes:
       - certbot_www:/var/www/certbot
       - certbot_certs:/etc/letsencrypt
