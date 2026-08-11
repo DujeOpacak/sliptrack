@@ -28,6 +28,19 @@ public class RecurringPattern {
     @Column(nullable = false)
     private String providerName;
 
+    // Nullable — isti providerName može slati više neovisnih vrsta uplatnica
+    // (npr. Zagrebački holding: komunalna naknada + odvoz smeća su različite
+    // SubCategory), pa se svaka kombinacija provider+subCategory+property uči
+    // i predviđa zasebno umjesto da se sve uplatnice tog providera pomiješaju
+    // u jedan prosjek.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "sub_category_id")
+    private SubCategory subCategory;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "property_id")
+    private Property property;
+
     private Integer averageDayOfMonth;
 
     private BigDecimal averageAmount;

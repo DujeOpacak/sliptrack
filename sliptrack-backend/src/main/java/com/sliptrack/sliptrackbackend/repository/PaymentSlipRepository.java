@@ -43,17 +43,22 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
     @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByStatusAndDueDateBefore(PaymentStatus status, LocalDate dueDate);
 
-    @EntityGraph(attributePaths = "user")
+    @EntityGraph(attributePaths = {"user", "subCategory", "property"})
     List<PaymentSlip> findByUserIdAndProviderNameOrderByDueDateAsc(Long userId, String providerName);
 
-    boolean existsByUserIdAndProviderNameAndDueDateBetween(
+    // Vraća listu (umjesto boolean/exists) da RecurringPatternService/ReminderService mogu
+    // null-safe filtrirati po subCategory/property
+    @EntityGraph(attributePaths = {"subCategory", "property"})
+    List<PaymentSlip> findByUserIdAndProviderNameAndDueDateBetween(
             Long userId, String providerName, LocalDate from, LocalDate to);
 
+    // GROUP BY po nullable subCategory/property radi ispravno u SQL-u (svi NULL-ovi se
+    // grupiraju zajedno) — sigurno, za razliku od WHERE usporedbe protiv nullable parametra.
     @Query("""
-            SELECT p.user.id, p.providerName
+            SELECT p.user.id, p.providerName, p.subCategory.id, p.property.id
             FROM PaymentSlip p
             WHERE p.providerName IS NOT NULL AND p.providerName <> ''
-            GROUP BY p.user.id, p.providerName
+            GROUP BY p.user.id, p.providerName, p.subCategory.id, p.property.id
             HAVING COUNT(p) >= 3
             """)
     List<Object[]> findUserProviderPairsWithMinimumHistory();

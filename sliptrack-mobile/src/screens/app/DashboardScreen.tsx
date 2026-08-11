@@ -18,7 +18,7 @@ import type {
   SubCategoryAmount,
   TimelinePoint,
 } from "../../types/dashboard";
-import type { Category } from "../../types/category";
+import type { Category, SubCategory } from "../../types/category";
 import type { Property } from "../../types/property";
 
 const formatEur = (value: number) => `${value.toFixed(2)} €`;
@@ -84,6 +84,9 @@ export default function DashboardScreen() {
   const [subCategoryData, setSubCategoryData] = useState<SubCategoryAmount[]>([]);
   const [isSubCategoryLoading, setIsSubCategoryLoading] = useState(true);
   const [subCategoryCategoryId, setSubCategoryCategoryId] = useState<number | undefined>();
+  const [subCategoryCategorySubCategories, setSubCategoryCategorySubCategories] = useState<
+    SubCategory[]
+  >([]);
   const [subCategoryPropertyId, setSubCategoryPropertyId] = useState<number | undefined>();
   const [subCategoryYear, setSubCategoryYear] = useState<number | undefined>();
   const [subCategoryMonth, setSubCategoryMonth] = useState<number | undefined>();
@@ -93,6 +96,26 @@ export default function DashboardScreen() {
   const [comparePropertyIdRight, setComparePropertyIdRight] = useState<number | undefined>();
   const [comparisonYear, setComparisonYear] = useState<number | undefined>();
   const [comparisonMonth, setComparisonMonth] = useState<number | undefined>();
+
+  useEffect(() => {
+    if (!subCategoryCategoryId) {
+      setSubCategoryCategorySubCategories([]);
+      return;
+    }
+    categoryApi.getSubCategories(subCategoryCategoryId).then((subs) => {
+      setSubCategoryCategorySubCategories(subs);
+      // Ako nijedna potkategorija ove kategorije ne dopušta nekretninu, filter po
+      // nekretnini se sakriva (vidi showSubCategoryPropertyFilter niže) — očisti već
+      // odabranu vrijednost da ne ostane tiho aktivan filter koji korisnik više ne vidi.
+      if (!subs.some((sc) => sc.allowsProperty)) {
+        setSubCategoryPropertyId(undefined);
+      }
+    });
+  }, [subCategoryCategoryId]);
+
+  const showSubCategoryPropertyFilter =
+    properties.length > 0 &&
+    (!subCategoryCategoryId || subCategoryCategorySubCategories.some((sc) => sc.allowsProperty));
 
   const propertyComparisonBySubCategory = useMemo(() => {
     if (!comparePropertyIdLeft || !comparePropertyIdRight) {
@@ -258,7 +281,7 @@ export default function DashboardScreen() {
             onChange={setSubCategoryCategoryId}
           />
         </View>
-        {properties.length > 0 && (
+        {showSubCategoryPropertyFilter && (
           <View style={styles.filterField}>
             <SelectField
               label="Nekretnina"
@@ -407,6 +430,7 @@ export default function DashboardScreen() {
           value={timelineMonths}
           options={RANGE_OPTIONS}
           onChange={(value) => setTimelineMonths(value ?? 6)}
+          allowClear={false}
         />
       </View>
       <View style={styles.card}>

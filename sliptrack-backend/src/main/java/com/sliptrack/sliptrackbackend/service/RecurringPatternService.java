@@ -1,7 +1,9 @@
 package com.sliptrack.sliptrackbackend.service;
 
 import com.sliptrack.sliptrackbackend.model.PaymentSlip;
+import com.sliptrack.sliptrackbackend.model.Property;
 import com.sliptrack.sliptrackbackend.model.RecurringPattern;
+import com.sliptrack.sliptrackbackend.model.SubCategory;
 import com.sliptrack.sliptrackbackend.model.User;
 import com.sliptrack.sliptrackbackend.repository.PaymentSlipRepository;
 import com.sliptrack.sliptrackbackend.repository.RecurringPatternRepository;
@@ -14,6 +16,7 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -25,20 +28,28 @@ public class RecurringPatternService {
     private final RecurringPatternRepository recurringPatternRepository;
 
     public void recomputeAll() {
-        for (Object[] pair : paymentSlipRepository.findUserProviderPairsWithMinimumHistory()) {
-            Long userId = (Long) pair[0];
-            String providerName = (String) pair[1];
-            recomputeOne(userId, providerName);
+        for (Object[] row : paymentSlipRepository.findUserProviderPairsWithMinimumHistory()) {
+            Long userId = (Long) row[0];
+            String providerName = (String) row[1];
+            Long subCategoryId = (Long) row[2];
+            Long propertyId = (Long) row[3];
+            recomputeOne(userId, providerName, subCategoryId, propertyId);
         }
     }
 
-    private void recomputeOne(Long userId, String providerName) {
-        List<PaymentSlip> history = paymentSlipRepository.findByUserIdAndProviderNameOrderByDueDateAsc(userId, providerName);
+    private void recomputeOne(Long userId, String providerName, Long subCategoryId, Long propertyId) {
+        List<PaymentSlip> history = paymentSlipRepository
+                .findByUserIdAndProviderNameOrderByDueDateAsc(userId, providerName).stream()
+                .filter(slip -> Objects.equals(idOf(slip.getSubCategory()), subCategoryId)
+                        && Objects.equals(idOf(slip.getProperty()), propertyId))
+                .toList();
         if (history.size() < MIN_HISTORY_SIZE) {
             return;
         }
 
         User user = history.get(0).getUser();
+        SubCategory subCategory = history.get(0).getSubCategory();
+        Property property = history.get(0).getProperty();
 
         int averageDayOfMonth = (int) Math.round(
                 history.stream().mapToInt(slip -> slip.getDueDate().getDayOfMonth()).average().orElseThrow());
@@ -55,7 +66,16 @@ public class RecurringPatternService {
                 projectNextPredictedDate(lastPaymentDate, cadenceMonths, averageDayOfMonth, LocalDate.now());
 
         RecurringPattern pattern = recurringPatternRepository.findByUserIdAndProviderName(userId, providerName)
-                .orElseGet(() -> RecurringPattern.builder().user(user).providerName(providerName).build());
+                .stream()
+                .filter(p -> Objects.equals(idOf(p.getSubCategory()), subCategoryId)
+                        && Objects.equals(idOf(p.getProperty()), propertyId))
+                .findFirst()
+                .orElseGet(() -> RecurringPattern.builder()
+                        .user(user)
+                        .providerName(providerName)
+                        .subCategory(subCategory)
+                        .property(property)
+                        .build());
 
         pattern.setAverageDayOfMonth(averageDayOfMonth);
         pattern.setAverageAmount(averageAmount);
@@ -63,6 +83,14 @@ public class RecurringPatternService {
         pattern.setNextPredictedDate(nextPredictedDate);
 
         recurringPatternRepository.save(pattern);
+    }
+
+    private static Long idOf(SubCategory subCategory) {
+        return subCategory == null ? null : subCategory.getId();
+    }
+
+    private static Long idOf(Property property) {
+        return property == null ? null : property.getId();
     }
 
     // prosjecni razmak izmedu uzastopnih uplata, omogucuje pruzateljima usluga s tromjesecnim, polugodisnjim,

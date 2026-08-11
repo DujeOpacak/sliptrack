@@ -1117,3 +1117,45 @@ Korisnik odlučio da ranija overlay ("plutanje preko sadržaja") promjena na Sel
 tsc --noEmit čist
 CLAUDE.md ažuriran (SelectField stavka u "Trenutno stanje" ispravljena da odražava povrat na izvorno ponašanje)
 Commit + push na dev, zatim merge dev → main — prvi pravi test automatskog deploy pipelinea uspostavljenog ovom sesijom (bez ručne SSH intervencije)
+
+12.08.2026 — RecurringPattern/ReminderService grupiranje po potkategoriji+nekretnini, tri manje UX dorade
+
+Objašnjeno kako ReminderService/RecurringPattern rade
+
+Korisnik zatražio objašnjenje cijelog reminder+recurring-pattern mehanizma — pregledan stvaran kod (RecurringPatternService, ReminderService), objašnjeno: recomputeAll() prvo uči obrazac po (user, providerName) iz min. 3 povijesne uplatnice (averageDayOfMonth, averageAmount, cadenceMonths — prosjek razmaka, ne pretpostavljen mjesečni; nextPredictedDate — samopopravljajuća projekcija), zatim 4 neovisna tipa podsjetnika (uskoro/danas/dospjelo — vezani uz postojeći paymentSlipId; predikcija — vezana uz RecurringPattern, dedup preko lastReminderSentAt po mjesecu)
+Korisnik pitao za točan prozor "Očekivane uplatnice" — reminder.days-ahead (trenutno 3), Spring Between je inkluzivan na oba kraja, dedup sprječava ponavljanje unutar istog mjeseca nakon prvog slanja
+
+Otkriven dizajn nedostatak — grupiranje samo po provideru
+
+Korisnik postavio hipotetski scenarij: isti provider (npr. Zagrebački holding) šalje komunalnu naknadu i odvoz smeća kao dvije različite SubCategory unutar iste Category — kako se to računa?
+Provjereno u kodu: recomputeAll() grupira isključivo po (user, providerName), bez subCategory/property — potvrđeno da bi to miješalo prosjeke dviju različitih vrsta uplatnica u jedan, i gore, sendPredictedReminders() "već stigla ovaj mjesec" provjera (existsByUserIdAndProviderNameAndDueDateBetween) ne filtrira po potkategoriji, pa bi dolazak jedne vrste lažno ugasio predikciju za drugu
+Korisnik pitao je li pametno razdvojiti po provider+kategorija+potkategorija — objašnjeno da je subCategory sam dovoljan diskriminator (kategorija ne nosi dodatnu informaciju), plus istaknut dodatni, gori slučaj: ista rupa postoji i za property (2 nekretnine, ista potkategorija, isti provider)
+Korisnik potvrdio scenarij za implementaciju: grupirati po (user, providerName, subCategory ako postoji, property ako postoji), svaka kombinacija uči/predviđa zasebno tek nakon 3+ vlastite povijesne uplatnice
+
+Implementacija
+
+RecurringPattern — dva nova nullable polja (subCategory, property); ddl-auto=update automatski dodao stupce + FK constraints, potvrđeno u logu, bez ručne migracije
+PaymentSlipRepository — findUserProviderPairsWithMinimumHistory() grupira po sve 4 dimenzije (GROUP BY na nullable stupcima siguran u SQL-u); nova findByUserIdAndProviderNameAndDueDateBetween vraća List umjesto exists/boolean da servisni sloj može null-safe filtrirati u Javi — namjerno izbjegnut JPQL (:param IS NULL OR ...) obrazac koji je već jednom vratio pogrešne rezultate (Dashboard "Po potkategoriji" bug, dokumentirano u CLAUDE.md)
+RecurringPatternRepository.findByUserIdAndProviderName promijenjen iz Optional u List (isti razlog)
+RecurringPatternService.recomputeOne filtrira povijest po točnoj kombinaciji subCategoryId/propertyId (null-safe Objects.equals), lookup/upsert postojećeg patterna isto filtrira listu umjesto Optional lookupa
+ReminderService dedup provjera i tekst poruke prošireni istom logikom — poruka "Očekivana uplatnica" (jedina bez postojećeg paymentSlipId) dobila dodatak s nazivom potkategorije/nekretnine; preostala tri tipa namjerno nepromijenjena (već imaju konkretan paymentSlipId, dodir odmah otvara uplatnicu, dodatni tekst nepotreban) — korisnik eksplicitno potvrdio da to treba ostati tako
+mvn compile čist, cijeli test suite (unit + Testcontainers IT + placeholder context test) prošao nakon što su lokalni dev Postgres/MinIO kontejneri (bili ugašeni) ponovno podignuti — placeholder SliptrackBackendApplicationTests.contextLoads pao samo zbog toga, nevezano uz izmjenu
+
+Korisničko testiranje na Android emulatoru
+
+Korisnik sam ubacio testne podatke (6 uplatnica, ista kategorija, 3+3 po dvije potkategorije, isti provider i nekretnina) i testirao na emulatoru
+Potvrdio: sve radi kako treba, uklj. scenarij gdje jedna potkategorija dobije stvarnu uplatnicu za mjesec dok druga i dalje ispravno dobiva vlastitu predikciju (točan bug koji je popravak trebao riješiti)
+
+Tri manje UX dorade (sve otkrivene/zatražene tijekom istog testiranja)
+
+SelectField dropdown duplikat: Dashboard "Razdoblje" selektor prikazivao "Zadnjih 6 mjeseci" dvaput u listi jer placeholder tekst (korišten i kao "obriši odabir" redak) slučajno odgovara nazivu stvarne opcije — SelectField dobio allowClear prop (default true), postavljen na false samo za taj selektor
+Filter "Nekretnina" na PaymentSlipListScreen i Dashboard "Po potkategoriji" mogao se kombinirati s kategorijom koja nema nijednu property-dopuštajuću potkategoriju (npr. Zdravstvo + neka nekretnina) i vratiti prazan rezultat bez objašnjenja — razmotreno disable vs. hide, odabran hide (dosljedno postojećem obrascu u appu — potkategorija/mjesec/druga nekretnina se već show/hide-aju, ne disable-aju in-place), filter se sad sakriva i automatski čisti odabranu vrijednost kad kategorija/potkategorija ne dopušta nekretninu; primijenjeno na oba mjesta
+Razmotren i odbačen (korisnikova odluka): tap na "Plaćeno"/"Neplaćeno" stat tile na Dashboardu da odmah otvori Uplatnice s pre-postavljenim filterom — procijenjeno kao izvedivo, ne implementirano, korisnik zaključio da trenutna implementacija dovoljna
+
+CLAUDE.md ažuriran (RecurringPattern domenski model, nova stavka u "Trenutno stanje" za grupiranje po potkategoriji/nekretnini + tri UX dorade)
+
+Sutra
+
+Commit + push implementacije (RecurringPattern grupiranje + tri UX dorade) na dev, zatim merge dev → main kad korisnik potvrdi
+5.1 (strategija testiranja) tekst za rad i dalje čeka — jedino preostalo prije pisanja/finalizacije rada
+Razmotriti treba li mobile production build gađati https://sliptrack.duckdns.org/api umjesto localhost/LAN IP-a za demo na obrani

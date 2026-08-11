@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
+import java.util.Objects;
 
 @Slf4j
 @Service
@@ -111,14 +112,25 @@ public class ReminderService {
                 continue;
             }
 
-            boolean alreadyTracked = paymentSlipRepository.existsByUserIdAndProviderNameAndDueDateBetween(
-                    pattern.getUser().getId(), pattern.getProviderName(),
-                    targetMonth.atDay(1), targetMonth.atEndOfMonth());
+            Long subCategoryId = pattern.getSubCategory() == null ? null : pattern.getSubCategory().getId();
+            Long propertyId = pattern.getProperty() == null ? null : pattern.getProperty().getId();
+
+            boolean alreadyTracked = paymentSlipRepository
+                    .findByUserIdAndProviderNameAndDueDateBetween(
+                            pattern.getUser().getId(), pattern.getProviderName(),
+                            targetMonth.atDay(1), targetMonth.atEndOfMonth())
+                    .stream()
+                    .anyMatch(slip -> Objects.equals(
+                            slip.getSubCategory() == null ? null : slip.getSubCategory().getId(), subCategoryId)
+                            && Objects.equals(
+                            slip.getProperty() == null ? null : slip.getProperty().getId(), propertyId));
             if (alreadyTracked) {
                 continue;
             }
 
-            String message = "Uskoro se očekuje uplatnica za " + pattern.getProviderName()
+            String detail = (pattern.getSubCategory() != null ? " — " + pattern.getSubCategory().getName() : "")
+                    + (pattern.getProperty() != null ? " (" + pattern.getProperty().getName() + ")" : "");
+            String message = "Uskoro se očekuje uplatnica za " + pattern.getProviderName() + detail
                     + " (procjena " + pattern.getNextPredictedDate() + ").";
             notificationService.create(pattern.getUser(), null, message);
             notifyDevices(pattern.getUser().getId(), "Očekivana uplatnica", message, null);

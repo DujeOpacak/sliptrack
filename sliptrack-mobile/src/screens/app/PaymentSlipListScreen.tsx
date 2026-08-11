@@ -73,8 +73,31 @@ export default function PaymentSlipListScreen({ navigation }: Props) {
       setSubCategoryId(undefined);
       return;
     }
-    categoryApi.getSubCategories(categoryId).then(setSubCategories);
+    categoryApi.getSubCategories(categoryId).then((subs) => {
+      setSubCategories(subs);
+      // Ako nijedna potkategorija ove kategorije ne dopušta nekretninu, filter po
+      // nekretnini se sakriva (vidi showPropertyFilter niže) — očisti već odabranu
+      // vrijednost da ne ostane tiho aktivan filter koji korisnik više ne vidi.
+      if (!subs.some((sc) => sc.allowsProperty)) {
+        setPropertyId(undefined);
+      }
+    });
   }, [categoryId]);
+
+  const handleSubCategoryChange = (newSubCategoryId: number | undefined) => {
+    setSubCategoryId(newSubCategoryId);
+    const newSubCategory = subCategories.find((sc) => sc.id === newSubCategoryId);
+    if (newSubCategoryId && !newSubCategory?.allowsProperty) {
+      setPropertyId(undefined);
+    }
+  };
+
+  const selectedSubCategory = subCategories.find((sc) => sc.id === subCategoryId);
+  const showPropertyFilter =
+    properties.length > 0 &&
+    (subCategoryId
+      ? Boolean(selectedSubCategory?.allowsProperty)
+      : !categoryId || subCategories.some((sc) => sc.allowsProperty));
 
   const hasActiveFilters = Boolean(status || categoryId || propertyId || year);
 
@@ -243,7 +266,7 @@ export default function PaymentSlipListScreen({ navigation }: Props) {
                   label: sc.name,
                   value: sc.id,
                 }))}
-                onChange={setSubCategoryId}
+                onChange={handleSubCategoryChange}
               />
             )}
 
@@ -268,7 +291,7 @@ export default function PaymentSlipListScreen({ navigation }: Props) {
               />
             )}
 
-            {properties.length > 0 && (
+            {showPropertyFilter && (
               <SelectField
                 label="Nekretnina"
                 placeholder="Sve nekretnine"

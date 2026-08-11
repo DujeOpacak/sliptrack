@@ -14,6 +14,10 @@ interface Props<T> {
   value: T | undefined;
   options: SelectOption<T>[];
   onChange: (value: T | undefined) => void;
+  // Kad polje uvijek nosi konkretnu vrijednost (nikad "nema odabira", npr. period selektor
+  // s defaultom), "obriši odabir" opcija na vrhu liste nema smisla i samo duplicira
+  // placeholder tekst ako se on poklapa s nazivom neke stvarne opcije.
+  allowClear?: boolean;
 }
 
 export default function SelectField<T extends string | number>({
@@ -22,6 +26,7 @@ export default function SelectField<T extends string | number>({
   value,
   options,
   onChange,
+  allowClear = true,
 }: Props<T>) {
   const [open, setOpen] = useState(false);
   const selectedLabel = options.find((o) => o.value === value)?.label;
@@ -44,15 +49,17 @@ export default function SelectField<T extends string | number>({
 
       {open && (
         <View style={styles.optionsList}>
-          <Pressable
-            style={styles.option}
-            onPress={() => {
-              onChange(undefined);
-              setOpen(false);
-            }}
-          >
-            <Text style={styles.optionText}>{placeholder}</Text>
-          </Pressable>
+          {allowClear && (
+            <Pressable
+              style={styles.option}
+              onPress={() => {
+                onChange(undefined);
+                setOpen(false);
+              }}
+            >
+              <Text style={styles.optionText}>{placeholder}</Text>
+            </Pressable>
+          )}
           {options.map((option) => (
             <Pressable
               key={option.value}
