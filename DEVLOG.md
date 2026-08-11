@@ -1061,3 +1061,59 @@ Redeploy backenda na VPS da se reminder.cron produkcijska vrijednost stvarno pri
 5.1 (strategija testiranja) tekst za rad i dalje čeka
 Razmotriti treba li mobile production build gađati https://sliptrack.duckdns.org/api umjesto localhost/LAN IP-a za demo na obrani
 5.1 (strategija) tekst za rad i dalje čeka
+
+11.08.2026, nastavak 2 — Automatski deploy pipeline (GitHub Actions → VPS), dev → main cutover
+
+Odluka i dogovor prije implementacije
+
+Korisnik zatražio: server neka klonira main umjesto dev, i automatski redeploy nakon promjena
+Dvije stvari razjašnjene s korisnikom prije implementacije (AskUserQuestion): (1) branch strategija — main postaje "produkcijski" branch, dev ostaje radni kao dosad, deploy se okida na svjestan dev → main merge, ne na svaki dev push (izabrano nad "svaki push na dev odmah deploya" opcijom); (2) mehanizam — GitHub Actions preko SSH-a (trenutan deploy), ne cron-polling na VPS-u (bez GitHub Secreta ali odgođen)
+
+Priprema infrastrukture
+
+Nov, namjenski SSH ključ generiran lokalno (~/.ssh/sliptrack_deploy, ed25519, bez passphrase) — odvojen od korisnikovog osobnog sliptrack_vps ključa
+Ključ dodan u VPS authorized_keys preko SSH-a s korisnikovim postojećim ključem (potvrđeno root pristup), testiran novim ključem — radi
+CHANGE_ME.duckdns.org placeholder u docker/nginx/conf.d/app.conf uklonjen, stvarna domena commitana izravno — server je imao lokalnu necommitanu izmjenu (ručni sed) koja se sudarala sa svakim git pull (poznat gotcha iz ranijeg DEVLOG zapisa); domena nije tajna pa nema razloga za placeholder
+docker/deploy.sh napisan — git fetch + reset --hard HEAD (odbaci lokalne izmjene) + checkout main + reset --hard origin/main, npm ci && npm run build za admin, docker compose -f docker-compose.prod.yml up -d --build
+.github/workflows/deploy.yml napisan — trigger na push u main, SSH preko appleboy/ssh-action, tri GitHub Secreta (VPS_HOST/VPS_USER/VPS_SSH_KEY)
+bash -n potvrdio sintaksu deploy.sh čistom
+
+Sigurnosna provjera prije prvog dev → main mergea
+
+main dosad samo .gitignore + README.md (prazan scaffold od početka projekta)
+git diff main dev --stat: 235 fajlova, +29671/-11 — cijeli prvi pravi sadržaj main brancha
+Provjereno: jedini trackani .env* fajlovi su .env.example (oba subprojekta) i sliptrack-admin/.env.production (nije tajna, samo VITE_API_BASE_URL=/api) — nema pravog .env-a, google-services.json-a ni privatnih ključeva trackanih
+Provjereno: nema node_modules/.idea/.vscode/build artefakata slučajno commitanih
+mvn compile (backend), tsc --noEmit (mobile i admin) svi čisti na dev HEAD-u
+Zaključak: dev siguran za merge u main, korisnik potvrdio nastavak
+
+Cutover
+
+git checkout main && git merge dev --ff-only — main bio predak od dev, čist fast-forward bez merge commita
+git push origin main
+VPS ručno bootstrapan (git fetch + checkout main + reset --hard origin/main) jer deploy.sh do tog trenutka još nije postojao na disku servera da bi ga Actions mogao pokrenuti
+deploy.sh ručno pokrenut preko SSH-a (novim deploy ključem) da se odmah potvrdi radi, bez čekanja na Actions status — backend rebuildan (Maven build unutar Docker multi-stage, BUILD SUCCESS), kontejner recreated, ostali servisi netaknuti
+curl https://sliptrack.duckdns.org → 200, backend log bez grešaka
+
+Provjera GitHub Actions statusa
+
+gh CLI nije instaliran (gh: command not found) — token izvučen iz Windows Credential Managera preko git credential fill (isti mehanizam koji Git koristi za HTTPS push/pull autentifikaciju), korišten za GitHub REST API pozive umjesto gh-a
+Prvi Actions run (triggeran samim push-om na main) pao: bash: .../docker/deploy.sh: No such file or directory — jaje-kokoš problem, workflow se okinuo prije nego je ručni bootstrap stigao postaviti deploy.sh na server
+Log potvrdio da secreti NISU uzrok (INPUT_HOST/INPUT_USERNAME/INPUT_KEY svi popunjeni u logu, samo maskirani kao ***)
+Run ručno ponovno pokrenut preko POST /repos/.../actions/runs/{id}/rerun (GitHub REST API) — status u pollingu (until-loop, bez dugog leading sleepa) prešao iz in_progress u completed/success
+Pipeline potvrđen ispravan end-to-end za sve buduće dev → main mergeve
+
+CLAUDE.md ažuriran (nova stavka u sekciji 10., deploy pipeline dizajn + cutover + prvi-run bootstrap gotcha)
+
+Sutra
+
+Redeploy backenda na VPS da se reminder.cron produkcijska vrijednost stvarno primijeni — RIJEŠENO ovom sesijom (deploy.sh ručno pokrenut, backend rebuildan s ispravnom vrijednosti)
+5.1 (strategija testiranja) tekst za rad i dalje čeka — jedino preostalo prije pisanja/finalizacije rada
+Razmotriti treba li mobile production build gađati https://sliptrack.duckdns.org/api umjesto localhost/LAN IP-a za demo na obrani
+
+11.08.2026, nastavak 3 — SelectField dropdown vraćen na izvorno ponašanje
+
+Korisnik odlučio da ranija overlay ("plutanje preko sadržaja") promjena na SelectField dropdownu ipak nije poželjna — vraćeno na izvorno ponašanje (gura sadržaj ispod sebe dolje), position: absolute/zIndex/elevation/containerOpen uklonjeni
+tsc --noEmit čist
+CLAUDE.md ažuriran (SelectField stavka u "Trenutno stanje" ispravljena da odražava povrat na izvorno ponašanje)
+Commit + push na dev, zatim merge dev → main — prvi pravi test automatskog deploy pipelinea uspostavljenog ovom sesijom (bez ručne SSH intervencije)
