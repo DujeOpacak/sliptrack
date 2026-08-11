@@ -21,8 +21,6 @@ describe("parseOcrText", () => {
     expect(result?.iban).toBe("HR1210010051863000160");
   });
 
-  // Regresijski test za popravljen bug: AMOUNT_REGEX je prije gubio vodeću
-  // znamenku kad OCR ne prepozna točku tisućice (vratio 234.56 umjesto 1234.56).
   test("iznos bez točke tisućice parsira se u cijelosti", () => {
     const result = parseOcrText(["Iznos za platiti: 1234,56 kn"]);
     expect(result?.amount).toBe(1234.56);

@@ -65,10 +65,9 @@ public class RecurringPatternService {
         recurringPatternRepository.save(pattern);
     }
 
-    // Average gap between consecutive slips, rounded to whole months (min. 1) — lets
-    // quarterly/semi-annual/annual providers get a correct cadence instead of an
-    // assumed monthly one. Package-private (not private) so RecurringPatternServiceTest
-    // can exercise it directly without mocking the repositories for pure date-math logic.
+    // prosjecni razmak izmedu uzastopnih uplata, omogucuje pruzateljima usluga s tromjesecnim, polugodisnjim,
+    // godisnjim ciklusom ispravan ritam umjesto pretpostavljenog mjesecnog.
+    // metoda nije privatna kako bi test mogao koristiti izravno bez mockanja repozitorija
     long averageCadenceMonths(List<PaymentSlip> history) {
         long totalMonths = 0;
         for (int i = 1; i < history.size(); i++) {
@@ -80,11 +79,8 @@ public class RecurringPatternService {
         return Math.max(averageMonths, 1);
     }
 
-    // Keeps advancing by one cadence at a time until the prediction is today or later,
-    // so a missed cycle (no new slip logged) doesn't leave nextPredictedDate stuck in
-    // the past forever — each daily recompute self-corrects it back into the future.
-    // `today` is injected (not LocalDate.now() internally) so tests can assert against
-    // fixed dates instead of relative-to-clock-at-test-run-time.
+    // nastavlja za jedan ciklus sve dok predvideni datum ne bude danas ili kasnije
+    // kako propusteni ciklus ne bi trajno zadrzao predictedDate u proslosti
     LocalDate projectNextPredictedDate(LocalDate lastPaymentDate, long cadenceMonths, int averageDayOfMonth, LocalDate today) {
         LocalDate predicted = lastPaymentDate;
         do {

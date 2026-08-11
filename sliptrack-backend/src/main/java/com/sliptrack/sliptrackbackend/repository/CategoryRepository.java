@@ -12,11 +12,7 @@ public interface CategoryRepository extends JpaRepository<Category, Long> {
 
     boolean existsByName(String name);
 
-    Optional<Category> findByName(String name);
-
-    // LEFT JOIN driven from Category (not PaymentSlip) so categories with zero slips
-    // still appear with count=0 — this is the "pun popis" counterpart to AdminService.getStats()'s
-    // top-5, which is expected to list every category.
+    // left join od kategorije tako da se prikazu i kategorije bez uplatnica
     @Query("""
             SELECT new com.sliptrack.sliptrackbackend.dto.AdminCategoryCountResponse(
                 c.id, c.name, COUNT(p))

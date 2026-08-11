@@ -78,10 +78,7 @@ public class SubCategoryService {
 
         SubCategory saved = subCategoryRepository.save(subCategory);
 
-        // Existing PaymentSlips recorded their category at creation time (PaymentSlip.category) —
-        // moving the subcategory to a different category would otherwise leave those rows pointing
-        // at a category that no longer matches subCategory.getCategory(), corrupting dashboard/admin
-        // grouping by category. Keep them in sync instead of blocking the move outright.
+        // Ako se promijeni kategorija unutar koje se nalazi ova potkategorija, moraju sve uplatnice imati referencu na novu kategoriju
         if (categoryChanged) {
             paymentSlipRepository.reassignCategoryForSubCategory(id, category);
         }

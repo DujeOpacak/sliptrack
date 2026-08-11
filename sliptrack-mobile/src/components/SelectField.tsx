@@ -27,7 +27,7 @@ export default function SelectField<T extends string | number>({
   const selectedLabel = options.find((o) => o.value === value)?.label;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, open && styles.containerOpen]}>
       <Text style={styles.label}>{label}</Text>
       <Pressable style={styles.field} onPress={() => setOpen((prev) => !prev)}>
         <Text
@@ -80,6 +80,7 @@ export default function SelectField<T extends string | number>({
 
 const styles = StyleSheet.create({
   container: { marginTop: 12 },
+  containerOpen: { zIndex: 20, elevation: 20 },
   label: { fontSize: 13, color: colors.textSecondary, marginBottom: 4 },
   field: {
     flexDirection: "row",
@@ -94,17 +95,29 @@ const styles = StyleSheet.create({
   fieldText: { fontSize: 15, color: colors.textPrimary },
   fieldPlaceholder: { color: colors.textMuted },
   optionsList: {
+    position: "absolute",
+    top: "100%",
+    left: 0,
+    right: 0,
+    marginTop: 4,
+    backgroundColor: colors.surface,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
-    marginTop: 4,
     overflow: "hidden",
+    zIndex: 20,
+    elevation: 20,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
   },
   option: {
     paddingVertical: 10,
     paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.gridline,
+    backgroundColor: colors.surface,
   },
   optionText: { fontSize: 15, color: colors.textPrimary },
   optionTextSelected: { color: colors.primary, fontWeight: "600" },

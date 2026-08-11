@@ -40,9 +40,6 @@ function AppNavigatorStack() {
   return (
     <AppStack.Navigator
       screenOptions={{
-        // iOS bi inače pored strelice ispisao naziv PRETHODNE rute kao tekst (ovdje
-        // "AppTabs" — interno ime taba, nema smisla korisniku) dok Android prikazuje
-        // samo strelicu bez teksta. "minimal" ujednačava na Android stil svugdje.
         headerBackButtonDisplayMode: "minimal",
       }}
     >

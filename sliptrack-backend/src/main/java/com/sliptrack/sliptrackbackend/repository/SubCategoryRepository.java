@@ -26,8 +26,7 @@ public interface SubCategoryRepository extends JpaRepository<SubCategory, Long> 
     @EntityGraph(attributePaths = "category")
     List<SubCategory> findByCategoryId(Long categoryId);
 
-    // LEFT JOIN driven from SubCategory (not PaymentSlip) so subcategories with zero
-    // slips still appear with count=0 — same "pun popis" reasoning as CategoryRepository.countGroupedByCategory().
+    // left join tako da se subcategory bez uplatnica i dalje prikazuje s 0
     @Query("""
             SELECT new com.sliptrack.sliptrackbackend.dto.AdminSubCategoryCountResponse(
                 s.id, s.name, s.category.id, COUNT(p))

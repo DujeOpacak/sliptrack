@@ -35,8 +35,8 @@ public class ExpoPushService {
                     // (IMPORTANCE_HIGH), koji registerPushToken.ts kreira upravo za tu svrhu.
                     "channelId", "default"
             ));
-            // Lets the mobile app deep-link straight to the relevant slip on tap (NotificationContext's
-            // response listener) — omitted for the "predicted" reminder case, which has no slip yet.
+
+            // Ako je predicted notifikacija ne salje se id uplatnice jer ne postoji
             if (paymentSlipId != null) {
                 payload.put("data", Map.of("paymentSlipId", paymentSlipId));
             }

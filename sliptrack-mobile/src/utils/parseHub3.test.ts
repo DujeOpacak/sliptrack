@@ -1,10 +1,5 @@
 import { parseHub3Barcode } from "./parseHub3";
 
-// Simulira stvarni bug otkriven fizičkim testiranjem na Androidu: ZXing/MLKit unutar
-// expo-camera pročita UTF-8 bajtove hrvatske dijakritike kao zasebne Latin-1 znakove.
-// encodeURIComponent+unescape je suprotan smjer istog trika koji parseHub3.ts koristi
-// za popravak (decodeURIComponent+escape) — pretvara ispravan JS string u niz znakova
-// gdje svaki znak == jedan UTF-8 bajt originala, točno ono što native dekoder vraća.
 function corruptAsRealDeviceWould(correctText: string): string {
   return unescape(encodeURIComponent(correctText));
 }

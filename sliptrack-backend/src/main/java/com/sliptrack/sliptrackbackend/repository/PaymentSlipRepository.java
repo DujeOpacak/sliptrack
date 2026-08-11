@@ -34,10 +34,6 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
 
     boolean existsBySubCategoryIdAndPropertyIsNotNull(Long subCategoryId);
 
-    // ReminderService/RecurringPatternService only touch .getId()/pass-through today, but the
-    // LAZY `user` association must be structurally guaranteed here (not left to caller @Transactional
-    // discipline) per the project's own EntityGraph convention — see CLAUDE.md's
-    // LazyInitializationException section.
     @EntityGraph(attributePaths = "user")
     List<PaymentSlip> findByStatusAndDueDateBetween(PaymentStatus status, LocalDate from, LocalDate to);
 
@@ -91,8 +87,7 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
             """, nativeQuery = true)
     List<Object[]> sumAmountGroupedByMonth(@Param("userId") Long userId);
 
-    // Keeps PaymentSlip.category (recorded at creation) in sync with subCategory.category
-    // when a SubCategory is moved to a different Category — see SubCategoryService.update().
+    // odrzava sinkronizaciju polja PaymentSlip.category s poljem subCategory.category
     @Modifying
     @Query("UPDATE PaymentSlip p SET p.category = :category WHERE p.subCategory.id = :subCategoryId")
     void reassignCategoryForSubCategory(@Param("subCategoryId") Long subCategoryId, @Param("category") Category category);

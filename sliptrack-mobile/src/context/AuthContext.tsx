@@ -92,7 +92,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(async () => {
     const refreshToken = await tokenStorage.getRefreshToken();
     if (refreshToken) {
-      // Best-effort — if the network call fails, still clear local state so the user isn't stuck logged in.
       await authApi.logout(refreshToken).catch(() => {});
     }
     const deviceId = await tokenStorage.getDeviceId();

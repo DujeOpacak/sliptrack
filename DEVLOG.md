@@ -999,5 +999,65 @@ Sutra
 
 5.1 (strategija testiranja) tekst za rad i dalje čeka — jedino preostalo prije pisanja/finalizacije rada
 Rebuild + retest headerBackButtonDisplayMode + mojibake popravaka na iPhoneu (korisnik će sam pokrenuti eas build)
+
+11.08.2026, nastavak — Produkcijski MinIO bug, treći epoch date picker bug, status-na-kreiranju, SelectField dropdown, cleanup
+
+Lokalni dev okoliš pojašnjen
+
+Korisnik pitao može li lokalno pokrenuti backend/Docker Desktop/admin/mobile neovisno o produkciji — potvrđeno da je posve odvojeno (zaseban Docker Desktop stack, dev docker-compose.yml, lokalni .env vrijednosti); jedino upozorenje: ne pokretati docker-compose.prod.yml lokalno paralelno s dev compose fajlom jer dijele container_name
+
+Produkcijski bug — MinIO upload slike vraća 500/502
+
+Korisnik testirao produkciju, upload slike u uplatnicu padao; dijagnosticirano preko SSH-a i docker compose logs (backend/minio/nginx redom)
+Nginx log otkrio pravi uzrok: connect() failed (111: Connection refused) prema staroj internoj Docker IP MinIO kontejnera (172.18.0.3) — MinIO kontejner recreatean (posljedica ranijeg commita koji je izložio Postgres/MinIO konzole na loopback), nginx stariji uptime (12h vs 11h) potvrdio teoriju da je zadržao staru IP iz vlastite DNS rezolucije pri startu
+Popravljeno: docker compose -f docker-compose.prod.yml restart nginx — potvrđeno logom (PUT/GET na MinIO 200), upload i dohvat slike rade
+CLAUDE.md dobio novu napomenu u sekciji 10. (Operativni gotcha nakon go-live): svaka izmjena docker-compose.prod.yml koja recreatea servis mora restartati/recreateati i nginx u istom koraku
+
+Usput otkriveno: reminder.cron i dalje na test vrijednosti
+
+Korisnik odmah nakon spremanja uplatnice s prošlim dueDate dobio push notifikaciju umjesto da čeka do 8h — uzrok: reminder.cron zatečen na 0 0/1 * * * * (svaka minuta), test vrijednost iz ranijeg testiranja koja je prema DEVLOG bilješci od 08.08./09.08. trebala biti vraćena ali revert nikad nije bio commitan
+Vraćeno na produkcijsku 0 0 8 * * * lokalno — čeka redeploy backenda na VPS da se stvarno primijeni
+
+Treći, opet drugačiji "epoch date picker" bug — PaymentSlipFormScreen
+
+Korisnik prijavio: pri kreiranju uplatnice dueDate picker prikazuje/dopušta samo 1.1.1970., "Potvrdi" bez diranja wheela svejedno sprema ispravan (današnji) datum
+Dva odvojena stvarna uzroka, otkrivena redom kroz analizu koda i web pretragu poznatih issuea:
+  1. dueDate i paidAt DateTimePicker dijelili identičan key={route.key} (ostatak ranijeg popravka) — bezopasno dok su bila međusobno isključiva, ali otkad status/paidAt picker može biti otvoren i pri kreiranju (vidi niže), oba mogu koegzistirati u istom ScrollView-u kao braća s istim ključem, zbunjujući React reconciliation. Popravljeno razdvajanjem ključeva (${route.key}-paidAt / ${route.key}-dueDate)
+  2. Pravi uzrok zaglavljivanja: poznat upstream bug u @react-native-community/datetimepicker na iOS-u (github issue #1007, pronađen preko WebSearcha) — minimumDate/maximumDate postavljeni na jednom pickeru (paidAt ima maximumDate={today}) procure u native sloju na sljedeći otvoreni picker koji te propse sam ne definira. Popravljeno eksplicitnim, širokim minimumDate/maximumDate na dueDate pickeru (1971 — danas+10 god.)
+Oba popravka čisti JS/prop izmjene, bez native modula — testirano reloadom postojećeg dev-client builda, nije trebao novi EAS build
+
+Nova funkcionalnost: status/paidAt pri kreiranju uplatnice
+
+Korisnikov zahtjev: moći odmah pri kreiranju označiti je li uplatnica plaćena, ne samo kroz naknadno editiranje
+Backend nepromijenjen (namjerno — PaymentSlipRequest nema status polje, PaymentSlipAudit mora ići kroz PATCH /status): mobile sad prikazuje status/paidAt UI i prije spremanja, drži izbor lokalno dok slip ne postoji, pa nakon uspješnog create() odmah zove isti PATCH /status poziv koji edit-flow već koristi — audit trail ostaje ispravan
+Reuse istog draft+Potvrdi obrasca kao postojeći paidAt picker
+
+SelectField dropdown — overlay umjesto guranja sadržaja
+
+Korisnikov UX zahtjev: dropdown liste (kategorija/potkategorija/godina/mjesec/nekretnina na Dashboardu) neka plutaju preko sadržaja ispod, ne guraju ga dolje
+optionsList promijenjen na position: absolute, container dobiva povišen zIndex/elevation (20) kad je otvoren da se ispravno iscrta preko sljedećih SelectField-ova (kasniji sibling bi inače default crtao preko njega)
+Zajednička komponenta — promjena vrijedi svugdje (Dashboard filteri, PaymentSlipFormScreen, PaymentSlipListScreen filteri)
+
+Mrtav kod u backendu — pregled komentara prerastao u čišćenje
+
+Korisnik tražio mišljenje o čišćenju "nepotrebnih" komentara u backendu — pregledano svih 37 linija komentara kroz cijeli main/java, ocjena: kvaliteta već vrlo dobra (skoro sve objašnjavaju zašto, ne što), samo jedan granični slučaj (JwtAuthenticationFilter.java:57) označen za korisnikovu vlastitu prosudbu
+Korisnik posumnjao da su PaymentSlipRequest.setIban() i CategoryRepository.findByName() mrtav kod — provjereno grepom: setIban() NIJE mrtav (Jackson ga zove refleksijom pri JSON deserijalizaciji, grep to ne vidi), findByName() JEST stvarno neiskorišten — korisnik ga sam obrisao
+
+Expo dev okoliš — više uzastopnih prepreka pri lokalnom iOS testiranju
+
+QR kod otvarao localhost:8081 u pregledniku umjesto u dev clientu — uzrok: skeniranje sustavskom kamerom umjesto Expo Go/dev client vlastitim skenerom
+Nakon prelaska na pravi skener: projekt više ne radi u čistom Expo Go-u otkad je dodan expo-text-extractor (OCR, custom native modul) — riješeno EAS development buildom (eas build --platform ios --profile development), instaliran preko linka, npx expo start --dev-client
+Dev client crni ekran pri prvom otvaranju — riješeno ručnim unosom URL-a ("Enter URL manually") umjesto QR-a
+Metro/Expo CLI konstantno prijavljivao localhost:8081 umjesto stvarne LAN IP unatoč --host lan — pravi uzrok: Windows ipconfig pokazao vEthernet (WSL (Hyper-V firewall)) virtualni adapter naveden prije stvarnog Wi-Fi adaptera, Node/Expo pokupio krivi. Riješeno eksplicitnim REACT_NATIVE_PACKAGER_HOSTNAME env varijablom postavljenom na stvarnu Wi-Fi IP (192.168.1.2) u istom terminalu
+--tunnel pokušan kao alternativa, odustalo se — noviji ngrok zahtijeva vlastiti account/authtoken, timeout na spajanje bez njega
+Port 8081 zauzet ostacima ranijih pozadinskih Claude Bash pokretanja — riješeno prihvaćanjem ponuđenog alternativnog porta (8082) i ažuriranjem ručno unesenog URL-a
+Nakon svega, fizičko iOS testiranje uspješno — potvrđeni svi popravci ove sesije na stvarnom uređaju
+
+CLAUDE.md ažuriran (nova epizoda epoch bug obrasca, status-na-kreiranju, SelectField dropdown, produkcijski MinIO/reminder.cron incident, mrtav kod)
+
+Sutra
+
+Redeploy backenda na VPS da se reminder.cron produkcijska vrijednost stvarno primijeni (lokalna izmjena još nije pushana/deployana)
+5.1 (strategija testiranja) tekst za rad i dalje čeka
 Razmotriti treba li mobile production build gađati https://sliptrack.duckdns.org/api umjesto localhost/LAN IP-a za demo na obrani
 5.1 (strategija) tekst za rad i dalje čeka

@@ -6,17 +6,12 @@ export interface ParsedOcrData {
 }
 
 // Za razliku od parseHub3Barcode (fiksni redoslijed polja), OCR tekst nema strukturu —
-// ML Kit/Vision vraćaju niz prepoznatih linija bez garantiranog redoslijeda, zato se
+// ML Kit/Vision vraća niz prepoznatih linija bez garantiranog redoslijeda, zato se
 // polja izvlače regexom nad spojenim tekstom, ne po poziciji. providerName/description
 // namjerno se ne izvlače (nepouzdano bez oznaka polja) — korisnik ih upisuje ručno.
 const IBAN_REGEX = /HR[ \t]?\d{2}(?:[ \t]?\d){17}/i;
 const MODEL_REGEX = /\bHR\d{2}\b(?!\d)/;
 const REFERENCE_AFTER_MODEL_REGEX = /\bHR\d{2}\b(?!\d)[\s:-]*(\d{4,26})/;
-// Two alternatives, not one optional group: a properly thousands-grouped amount
-// ("1.234,56") must win when present, but a plain run of digits ("1234,56" — OCR
-// missed the separator dot) must still match its FULL length, not just the last
-// 1-3 digits before the comma. The boundary lookaround/lookbehind pair on each
-// alternative stops a match from starting or continuing mid-digit-run.
 const AMOUNT_REGEX = /(?<!\d)\d{1,3}(?:\.\d{3})+,\d{2}(?!\d)|(?<!\d)\d+,\d{2}(?!\d)/;
 
 export function parseOcrText(lines: string[]): ParsedOcrData | null {

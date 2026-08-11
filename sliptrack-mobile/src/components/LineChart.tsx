@@ -104,7 +104,6 @@ export default function LineChart({ data, formatValue = defaultFormat }: Props) 
                     stroke={colors.surface}
                     strokeWidth={2}
                   />
-                  {/* Veci nevidljivi krug samo za lakse pogadjanje dodirom na malu tocku. */}
                   <Circle
                     cx={p.x}
                     cy={p.y}

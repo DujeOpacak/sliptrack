@@ -75,6 +75,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [description, setDescription] = useState("");
   const [dueDate, setDueDate] = useState<Date | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
+  const [draftDueDate, setDraftDueDate] = useState(new Date());
   const [status, setStatus] = useState<PaymentStatus>("UNPAID");
   const [paidAt, setPaidAt] = useState<Date | null>(null);
   const [isTogglingStatus, setIsTogglingStatus] = useState(false);
@@ -94,9 +95,13 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   const [subCategoryId, setSubCategoryId] = useState<number | undefined>();
   const [propertyId, setPropertyId] = useState<number | undefined>();
 
-  // Stabilna referenca — new Date() ne smije se računati iznova pri svakom rendera
-  // dok je Android picker otvoren, jer se native modul zbuni i resetira prikaz na epoch (01.01.1970).
+
   const today = useMemo(() => new Date(), []);
+  const dueDateMinDate = useMemo(() => new Date(1971, 0, 1), []);
+  const dueDateMaxDate = useMemo(
+    () => new Date(today.getFullYear() + 10, 11, 31),
+    [today],
+  );
 
   const selectedSubCategory = subCategories.find((sc) => sc.id === subCategoryId);
   const allowsProperty = selectedSubCategory?.allowsProperty ?? false;
@@ -142,8 +147,6 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         setAmount(ocrData.amount !== undefined ? String(ocrData.amount) : "");
         setReferenceNumber(ocrData.referenceNumber ?? "");
         setPaymentModel(ocrData.paymentModel ?? "");
-        // OCR fotografija uplatnice je već snimljena za prepoznavanje teksta —
-        // reusea se izravno kao slika uplatnice, korisnik je ne treba birati opet.
         if (ocrSourceImage) {
           setPickedImage(ocrSourceImage);
         }
@@ -250,6 +253,21 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
         ? (await paymentSlipApi.update(paymentSlipId, request)).id
         : (await paymentSlipApi.create(request)).id;
 
+      if (!isEditing && status === "PAID") {
+        try {
+          await paymentSlipApi.updateStatus(
+            savedId,
+            "PAID",
+            paidAt ? formatDateLocal(paidAt) : undefined,
+          );
+        } catch {
+          Alert.alert(
+            "Status nije spremljen",
+            "Uplatnica je spremljena kao neplaćena — status promijeni kroz uređivanje.",
+          );
+        }
+      }
+
       if (pickedImage) {
         try {
           await paymentSlipApi.uploadImage(savedId, pickedImage);
@@ -290,9 +308,13 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   };
 
   const handleToggleStatus = () => {
-    if (!isEditing) return;
     if (status === "PAID") {
-      void applyStatusChange("UNPAID");
+      if (isEditing) {
+        void applyStatusChange("UNPAID");
+      } else {
+        setStatus("UNPAID");
+        setPaidAt(null);
+      }
       return;
     }
     setDraftPaidAt(new Date());
@@ -300,7 +322,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
   };
 
   const handleEditPaidAt = () => {
-    if (!isEditing || status !== "PAID") return;
+    if (status !== "PAID") return;
     setDraftPaidAt(paidAt ?? new Date());
     setShowPaidAtPicker(true);
   };
@@ -309,7 +331,12 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
     if (Platform.OS === "android") {
       setShowPaidAtPicker(false);
       if (event.type !== "dismissed" && selectedDate) {
-        void applyStatusChange("PAID", selectedDate);
+        if (isEditing) {
+          void applyStatusChange("PAID", selectedDate);
+        } else {
+          setStatus("PAID");
+          setPaidAt(selectedDate);
+        }
       }
     } else if (selectedDate) {
       setDraftPaidAt(selectedDate);
@@ -318,7 +345,12 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
 
   const handleConfirmPaidAt = () => {
     setShowPaidAtPicker(false);
-    void applyStatusChange("PAID", draftPaidAt);
+    if (isEditing) {
+      void applyStatusChange("PAID", draftPaidAt);
+    } else {
+      setStatus("PAID");
+      setPaidAt(draftPaidAt);
+    }
   };
 
   const handleDelete = () => {
@@ -363,27 +395,25 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
           </Text>
         </View>
       )}
-      {isEditing && (
-        <Pressable
-          style={[
-            styles.statusButton,
-            status === "PAID" ? styles.statusButtonPaid : styles.statusButtonUnpaid,
-          ]}
-          onPress={handleToggleStatus}
-          disabled={isTogglingStatus}
-        >
-          {isTogglingStatus ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.statusButtonText}>
-              {status === "PAID"
-                ? "✓ Plaćeno — dodirni za neplaćeno"
-                : "Neplaćeno — dodirni za plaćeno"}
-            </Text>
-          )}
-        </Pressable>
-      )}
-      {isEditing && status === "PAID" && (
+      <Pressable
+        style={[
+          styles.statusButton,
+          status === "PAID" ? styles.statusButtonPaid : styles.statusButtonUnpaid,
+        ]}
+        onPress={handleToggleStatus}
+        disabled={isTogglingStatus}
+      >
+        {isTogglingStatus ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
+          <Text style={styles.statusButtonText}>
+            {status === "PAID"
+              ? "✓ Plaćeno — dodirni za neplaćeno"
+              : "Neplaćeno — dodirni za plaćeno"}
+          </Text>
+        )}
+      </Pressable>
+      {status === "PAID" && (
         <Pressable style={styles.paidAtRow} onPress={handleEditPaidAt}>
           <Text style={styles.paidAtText}>
             Plaćeno: {paidAt ? formatDateLocal(paidAt) : "—"}
@@ -394,7 +424,7 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       {showPaidAtPicker && (
         <View style={styles.paidAtPickerWrapper}>
           <DateTimePicker
-            key={route.key}
+            key={`${route.key}-paidAt`}
             value={draftPaidAt}
             mode="date"
             maximumDate={today}
@@ -525,23 +555,48 @@ export default function PaymentSlipFormScreen({ navigation, route }: Props) {
       />
 
       <Text style={styles.label}>Datum dospijeća</Text>
-      <Pressable style={styles.input} onPress={() => setShowDatePicker(true)}>
+      <Pressable
+        style={styles.input}
+        onPress={() => {
+          setDraftDueDate(dueDate ?? today);
+          setShowDatePicker(true);
+        }}
+      >
         <Text style={dueDate ? styles.dateText : styles.datePlaceholder}>
           {dueDate ? formatDateLocal(dueDate) : "Odaberi datum"}
         </Text>
       </Pressable>
       {showDatePicker && (
-        <DateTimePicker
-          key={route.key}
-          value={dueDate ?? today}
-          mode="date"
-          onChange={(event, selectedDate) => {
-            setShowDatePicker(Platform.OS === "ios");
-            if (event.type !== "dismissed" && selectedDate) {
-              setDueDate(selectedDate);
-            }
-          }}
-        />
+        <View style={styles.paidAtPickerWrapper}>
+          <DateTimePicker
+            key={`${route.key}-dueDate`}
+            value={draftDueDate}
+            mode="date"
+            minimumDate={dueDateMinDate}
+            maximumDate={dueDateMaxDate}
+            onChange={(event, selectedDate) => {
+              if (Platform.OS === "android") {
+                setShowDatePicker(false);
+                if (event.type !== "dismissed" && selectedDate) {
+                  setDueDate(selectedDate);
+                }
+              } else if (selectedDate) {
+                setDraftDueDate(selectedDate);
+              }
+            }}
+          />
+          {Platform.OS === "ios" && (
+            <Pressable
+              style={styles.button}
+              onPress={() => {
+                setShowDatePicker(false);
+                setDueDate(draftDueDate);
+              }}
+            >
+              <Text style={styles.buttonText}>Potvrdi datum dospijeća</Text>
+            </Pressable>
+          )}
+        </View>
       )}
 
       <SelectField
