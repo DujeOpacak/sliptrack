@@ -52,8 +52,6 @@ public interface PaymentSlipRepository extends JpaRepository<PaymentSlip, Long>,
     List<PaymentSlip> findByUserIdAndProviderNameAndDueDateBetween(
             Long userId, String providerName, LocalDate from, LocalDate to);
 
-    // GROUP BY po nullable subCategory/property radi ispravno u SQL-u (svi NULL-ovi se
-    // grupiraju zajedno) — sigurno, za razliku od WHERE usporedbe protiv nullable parametra.
     @Query("""
             SELECT p.user.id, p.providerName, p.subCategory.id, p.property.id
             FROM PaymentSlip p

@@ -71,7 +71,6 @@ public abstract class AbstractIntegrationTest {
 
     protected static final String DEFAULT_PASSWORD = "lozinka123";
 
-    /** Registrira novog USER korisnika preko stvarnog /api/auth/register endpointa i vraća access token. */
     protected String registerAndGetAccessToken(String email) throws Exception {
         RegisterRequest request = new RegisterRequest();
         request.setFirstName("Test");
@@ -88,11 +87,6 @@ public abstract class AbstractIntegrationTest {
         return extractAccessToken(result);
     }
 
-    /**
-     * Nema register endpointa za ADMIN (namjerno — admin računi se provisioniraju ručno, ne
-     * self-registracijom, vidi CLAUDE.md sigurnosni model), pa se ovdje admin ubacuje izravno
-     * kroz repository, a token se dobiva pravim /api/auth/login pozivom.
-     */
     protected String createAdminAndGetAccessToken(String email) throws Exception {
         User admin = User.builder()
                 .firstName("Admin")

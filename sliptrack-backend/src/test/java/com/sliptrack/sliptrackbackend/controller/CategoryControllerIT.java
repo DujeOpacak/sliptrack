@@ -82,8 +82,6 @@ class CategoryControllerIT extends AbstractIntegrationTest {
                         .content(slipJson))
                 .andExpect(status().isOk());
 
-        // FK-conflict obrazac (vidi CLAUDE.md): brisanje mora vratiti čist 409, ne neuhvaćen
-        // DataIntegrityViolationException/500 kad FK constraint padne.
         mockMvc.perform(delete("/api/categories/" + category.getId())
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isConflict())

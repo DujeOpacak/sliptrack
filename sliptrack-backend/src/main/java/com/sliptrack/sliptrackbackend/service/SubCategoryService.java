@@ -78,7 +78,6 @@ public class SubCategoryService {
 
         SubCategory saved = subCategoryRepository.save(subCategory);
 
-        // Ako se promijeni kategorija unutar koje se nalazi ova potkategorija, moraju sve uplatnice imati referencu na novu kategoriju
         if (categoryChanged) {
             paymentSlipRepository.reassignCategoryForSubCategory(id, category);
         }

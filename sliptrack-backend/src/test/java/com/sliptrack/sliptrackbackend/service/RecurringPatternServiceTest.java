@@ -8,11 +8,6 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-// Čist JUnit unit test — bez Spring konteksta, bez baze. RecurringPatternService nema
-// vanjske efekte u ovim metodama osim čiste datumske aritmetike, pa nema potrebe za
-// Mockitom niti @SpringBootTest. Pokriva rubne slučajeve koji su ranije ručno provjereni
-// SQL trikom (preskakanje više propuštenih ciklusa, day-of-month clamping) — vidi CLAUDE.md
-// "RecurringPattern predikcija" i DEVLOG 09.08.2026.
 class RecurringPatternServiceTest {
 
     private final RecurringPatternService service =
@@ -75,9 +70,6 @@ class RecurringPatternServiceTest {
 
     @Test
     void preskacePropusteneCiklusePetPuta_bezPucanja() {
-        // Zadnja stvarna uplatnica u siječnju, "danas" je u kolovozu — mora preskočiti
-        // veljaču/ožujak/travanj/svibanj/lipanj/srpanj (5 propuštenih ciklusa) bez ijedne
-        // nove uplatnice u međuvremenu, i sletjeti na prvi budući datum (11.08.).
         LocalDate result = service.projectNextPredictedDate(
                 LocalDate.of(2026, 1, 11), 1, 11, LocalDate.of(2026, 8, 9));
 

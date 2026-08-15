@@ -106,7 +106,6 @@ class AuthControllerIT extends AbstractIntegrationTest {
         JsonNode refreshJson = objectMapper.readTree(refreshResult.getResponse().getContentAsString());
         assertThat(refreshJson.get("refreshToken").asText()).isNotEqualTo(originalRefreshToken);
 
-        // Rotacija — stari refresh token je sad opozvan, ponovna upotreba mora pasti.
         mockMvc.perform(post("/api/auth/refresh")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\": \"" + originalRefreshToken + "\"}"))

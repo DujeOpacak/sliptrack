@@ -93,9 +93,6 @@ public class RecurringPatternService {
         return property == null ? null : property.getId();
     }
 
-    // prosjecni razmak izmedu uzastopnih uplata, omogucuje pruzateljima usluga s tromjesecnim, polugodisnjim,
-    // godisnjim ciklusom ispravan ritam umjesto pretpostavljenog mjesecnog.
-    // metoda nije privatna kako bi test mogao koristiti izravno bez mockanja repozitorija
     long averageCadenceMonths(List<PaymentSlip> history) {
         long totalMonths = 0;
         for (int i = 1; i < history.size(); i++) {
@@ -107,8 +104,6 @@ public class RecurringPatternService {
         return Math.max(averageMonths, 1);
     }
 
-    // nastavlja za jedan ciklus sve dok predvideni datum ne bude danas ili kasnije
-    // kako propusteni ciklus ne bi trajno zadrzao predictedDate u proslosti
     LocalDate projectNextPredictedDate(LocalDate lastPaymentDate, long cadenceMonths, int averageDayOfMonth, LocalDate today) {
         LocalDate predicted = lastPaymentDate;
         do {

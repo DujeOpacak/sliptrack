@@ -30,9 +30,6 @@ public class ExpoPushService {
                     "title", title,
                     "body", body,
                     "sound", "default",
-                    // Bez ovoga Android FCM koristi generički fcm_fallback_notification_channel
-                    // (IMPORTANCE_DEFAULT, bez heads-up banera) umjesto app-ovog "default" kanala
-                    // (IMPORTANCE_HIGH), koji registerPushToken.ts kreira upravo za tu svrhu.
                     "channelId", "default"
             ));
 
@@ -47,8 +44,6 @@ public class ExpoPushService {
                     .retrieve()
                     .body(String.class);
 
-            // Expo API zna vratiti 200 OK s greškom unutar JSON tijela (npr. DeviceNotRegistered,
-            // InvalidCredentials) — to ne baca iznimku, pa se mora ručno provjeriti tekst odgovora.
             if (response != null && response.contains("\"status\":\"error\"")) {
                 log.warn("Expo push API vratio grešku za uređaj (token {}): {}", deviceToken, response);
             }
