@@ -60,7 +60,7 @@
 .rankValue {
   font-family: var(--mono);
   font-size: 13px;
-  color: var(--accent-text);
+  color: var(--accent);
 }
 
 .linkGrid {

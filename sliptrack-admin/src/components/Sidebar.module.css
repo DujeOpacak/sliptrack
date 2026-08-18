@@ -92,7 +92,7 @@
 }
 
 .navItemActive {
-  color: var(--accent-text);
+  color: var(--accent);
   border-left-color: var(--accent);
   background: var(--surface-raised);
 }
@@ -112,6 +112,7 @@
   margin-bottom: 12px;
 }
 
+.themeBtn,
 .logoutBtn {
   display: flex;
   align-items: center;
@@ -125,6 +126,15 @@
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+.themeBtn {
+  margin-bottom: 8px;
+}
+
+.themeBtn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .logoutBtn:hover {

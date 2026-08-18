@@ -72,7 +72,7 @@
 }
 
 .badgeAdmin {
-  color: var(--accent-text);
+  color: var(--accent);
   border-color: var(--accent);
 }
 

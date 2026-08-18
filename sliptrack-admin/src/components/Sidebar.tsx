@@ -1,6 +1,16 @@
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { CategoriesIcon, CloseIcon, DashboardIcon, LogoutIcon, StatsIcon, UsersIcon } from "./icons";
+import { useTheme } from "../context/ThemeContext";
+import {
+  CategoriesIcon,
+  CloseIcon,
+  DashboardIcon,
+  LogoutIcon,
+  MoonIcon,
+  StatsIcon,
+  SunIcon,
+  UsersIcon,
+} from "./icons";
 import styles from "./Sidebar.module.css";
 
 const NAV_ITEMS = [
@@ -17,6 +27,7 @@ interface SidebarProps {
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
 
   return (
     <aside className={isOpen ? `${styles.sidebar} ${styles.sidebarOpen}` : styles.sidebar}>
@@ -48,6 +59,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       <div className={styles.footer}>
         <div className={styles.userEmail}>{user?.email}</div>
+        <button className={styles.themeBtn} onClick={toggleTheme}>
+          {theme === "dark" ? <SunIcon width={14} height={14} /> : <MoonIcon width={14} height={14} />}
+          {theme === "dark" ? "Svijetla tema" : "Tamna tema"}
+        </button>
         <button className={styles.logoutBtn} onClick={logout}>
           <LogoutIcon width={14} height={14} />
           Odjava

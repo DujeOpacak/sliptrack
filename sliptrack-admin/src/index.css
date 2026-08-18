@@ -22,6 +22,20 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+:root[data-theme="light"] {
+  --bg: #f5f4f0;
+  --surface: #ffffff;
+  --surface-raised: #ebeae5;
+  --border: #ddd9d0;
+  --border-strong: #c7c2b7;
+  --text-primary: #1a1a1a;
+  --text-secondary: #55524a;
+  --text-muted: #918d82;
+  --accent-text: #ffffff;
+
+  color-scheme: light;
+}
+
 *,
 *::before,
 *::after {
@@ -90,7 +104,7 @@ button {
 
 .btn:hover:not(:disabled) {
   border-color: var(--accent);
-  color: var(--accent-text);
+  color: var(--accent);
 }
 
 .btn:disabled {

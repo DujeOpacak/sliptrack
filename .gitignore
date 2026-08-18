@@ -38,9 +38,7 @@ build/
 .env
 .env.local
 .env.production
-# Iznimka: sliptrack-admin/.env.production ne sadrži tajnu (samo VITE_API_BASE_URL=/api,
-# build-time konstanta za produkcijski API put) — mora biti u gitu da svježe klonirani
-# repo (npr. na VPS-u) ispravno buildа admin s relativnim /api putem, ne dev fallbackom.
+
 !sliptrack-admin/.env.production
 
 # ========================
@@ -68,3 +66,9 @@ desktop.ini
 *.env
 application-local.properties
 application-prod.properties
+
+# ========================
+# Interna dokumentacija
+# ========================
+CLAUDE.md
+DEVLOG.md

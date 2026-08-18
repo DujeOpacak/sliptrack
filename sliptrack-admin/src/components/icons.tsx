@@ -128,6 +128,30 @@ export function CloseIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function SunIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <rect x="9" y="9" width="6" height="6" />
+      <path d="M12 2v3" />
+      <path d="M12 19v3" />
+      <path d="M2 12h3" />
+      <path d="M19 12h3" />
+      <path d="M4.5 4.5l2 2" />
+      <path d="M17.5 17.5l2 2" />
+      <path d="M19.5 4.5l-2 2" />
+      <path d="M6.5 17.5l-2 2" />
+    </Base>
+  );
+}
+
+export function MoonIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <Base {...props}>
+      <path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z" />
+    </Base>
+  );
+}
+
 export function SortIcon({ direction }: { direction: "asc" | "desc" | null }) {
   return (
     <svg width="9" height="12" viewBox="0 0 9 12" fill="none">
